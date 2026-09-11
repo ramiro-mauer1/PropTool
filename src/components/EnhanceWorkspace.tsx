@@ -42,7 +42,7 @@ export function EnhanceWorkspace({
   const fallbackQueue = useEnhanceQueue({
     onError: (err) => {
       showToast({
-        title: "Error en Super-Resolución",
+        title: "Error en Mejora de Fotos",
         message: err,
         type: "error",
       });
@@ -198,7 +198,7 @@ export function EnhanceWorkspace({
               onFilesAdded={handleFilesAdded}
               maxFiles={MAX_QUEUE_SIZE}
               title="Aumentar resolución de fotografías"
-              subtitle={`Super-Resolución con IA para mejorar la definición a 4K. Máximo ${MAX_QUEUE_SIZE} fotos por lote.`}
+              subtitle={`Mejora de Fotos con IA para mejorar la definición a 4K. Máximo ${MAX_QUEUE_SIZE} fotos por lote.`}
             />
           </motion.div>
         ) : (
@@ -230,7 +230,7 @@ export function EnhanceWorkspace({
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                      Super-Resolución 4x
+                      Mejora de Fotos 4x
                     </h2>
                     <span className="text-2xs font-mono px-2 py-0.5 rounded-full bg-surface-raised border border-border text-muted tabular-nums">
                       {queue.length}/{MAX_QUEUE_SIZE}
@@ -379,7 +379,7 @@ export function EnhanceWorkspace({
                         </div>
                       ) : item.status === "completed" ? (
                         <div className="flex items-center justify-between mt-1 text-2xs text-success font-medium">
-                          <span>Super-Resolución</span>
+                          <span>Mejora de Fotos</span>
                           <span>Lista</span>
                         </div>
                       ) : item.status === "error" ? (

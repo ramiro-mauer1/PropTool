@@ -486,7 +486,7 @@ export function ImageGallery({
                     type="button"
                     onClick={() => onSendToEnhance(currentItem.id)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-accent text-zinc-950 hover:bg-accent-hover btn-tactile shadow-subtle"
-                    title="Aumentar nitidez con Super-Resolución"
+                    title="Aumentar nitidez con Mejora de Fotos"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
                     <span>Mejorar 4x</span>
@@ -526,8 +526,8 @@ export function ImageGallery({
                 Limpia con IA
               </span>
             ) : currentBBox || activeStrokes.length > 0 ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-950/85 text-amber-300 border border-amber-500/40 backdrop-blur-md shadow-md">
-                <Sparkles className="w-3 h-3 text-amber-400" />
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-accent/15 text-accent border border-accent/20 backdrop-blur-md shadow-md">
+                <Sparkles className="w-3 h-3 text-accent" />
                 Máscara activa
               </span>
             ) : null}
@@ -599,8 +599,8 @@ export function ImageGallery({
                       y={svgBox.y}
                       width={svgBox.width}
                       height={svgBox.height}
-                      fill="rgba(245, 158, 11, 0.32)"
-                      stroke="rgba(245, 158, 11, 0.95)"
+                      fill="rgba(212, 255, 50, 0.32)"
+                      stroke="rgba(212, 255, 50, 0.95)"
                       strokeWidth="2"
                       strokeDasharray="5 3"
                       rx="4"
@@ -622,7 +622,7 @@ export function ImageGallery({
                     <path
                       key={`st_${sIdx}`}
                       d={d}
-                      stroke="rgba(245, 158, 11, 0.6)"
+                      stroke="rgba(212, 255, 50, 0.6)"
                       strokeWidth={48 * scale}
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -641,7 +641,7 @@ export function ImageGallery({
                         return `${pIdx === 0 ? "M" : "L"} ${sx} ${sy}`;
                       })
                       .join(" ")}
-                    stroke="rgba(245, 158, 11, 0.7)"
+                    stroke="rgba(212, 255, 50, 0.7)"
                     strokeWidth={48 * scale}
                     strokeLinecap="round"
                     strokeLinejoin="round"

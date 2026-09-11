@@ -3,51 +3,29 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
-    --color-bg-base: #fbfbf9;
-    --color-surface-sunken: #f5f5f2;
-    --color-surface: #ffffff;
-    --color-surface-raised: #fafaf7;
-    --color-surface-overlay: #ffffff;
-    --color-border: rgba(0, 0, 0, 0.06);
-    --color-border-subtle: rgba(0, 0, 0, 0.04);
-    --color-border-hover: rgba(0, 0, 0, 0.12);
-    --color-text-primary: #191918;
-    --color-text-secondary: #6e6e6b;
-    --color-text-muted: #8c8c88;
-    --color-accent: #5e48d9;
-    --color-accent-hover: #4e3cb8;
-    --color-accent-muted: rgba(94, 72, 217, 0.1);
-    --color-accent-subtle: rgba(94, 72, 217, 0.05);
-    --color-success: #10b981;
-    --color-success-muted: rgba(16, 185, 129, 0.14);
-    --color-error: #ef4444;
-    --color-error-muted: rgba(239, 68, 68, 0.14);
-    --ease-out-expo: cubic-bezier(0.23, 1, 0.32, 1);
-    --ease-in-out-expo: cubic-bezier(0.77, 0, 0.175, 1);
-    color-scheme: light;
-  }
-
-  .dark {
-    --color-bg-base: #09090b;
-    --color-surface-sunken: #0c0c0e;
-    --color-surface: #111114;
-    --color-surface-raised: #16161b;
-    --color-surface-overlay: #1e1e24;
+  :root, .dark {
+    --color-bg-base: #08090a;
+    --color-surface-sunken: #08090a;
+    --color-surface: #0f1115;
+    --color-surface-raised: #13161c;
+    --color-surface-overlay: #13161c;
     --color-border: rgba(255, 255, 255, 0.08);
     --color-border-subtle: rgba(255, 255, 255, 0.05);
-    --color-border-hover: rgba(167, 139, 250, 0.3);
-    --color-text-primary: #f4f4f5;
-    --color-text-secondary: #a1a1aa;
-    --color-text-muted: #71717a;
-    --color-accent: #a78bfa;
-    --color-accent-hover: #c4b5fd;
-    --color-accent-muted: rgba(167, 139, 250, 0.12);
-    --color-accent-subtle: rgba(167, 139, 250, 0.06);
-    --color-success: #10b981;
-    --color-success-muted: rgba(16, 185, 129, 0.14);
+    --color-border-hover: rgba(212, 255, 50, 0.4);
+    --color-text-primary: #ffffff;
+    --color-text-secondary: #8f96a3;
+    --color-text-muted: rgba(143, 150, 163, 0.7);
+    --color-accent: #d4ff32;
+    --color-accent-hover: #b8e61e;
+    --color-accent-muted: rgba(212, 255, 50, 0.15);
+    --color-accent-subtle: rgba(212, 255, 50, 0.08);
+    --color-success: #d4ff32;
+    --color-success-muted: rgba(212, 255, 50, 0.15);
     --color-error: #ef4444;
-    --color-error-muted: rgba(239, 68, 68, 0.14);
+    --color-error-muted: rgba(239, 68, 68, 0.15);
+    
+    --ease-out-expo: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out-expo: cubic-bezier(0.77, 0, 0.175, 1);
     color-scheme: dark;
   }
 

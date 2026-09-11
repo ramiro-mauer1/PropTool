@@ -165,7 +165,7 @@ export function ResultModal({
                   onClose();
                   onRetouch(image);
                 }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-subtle bg-accent/15 hover:bg-accent text-amber-300 hover:text-zinc-950 border border-amber-500/30 text-xs font-semibold transition-all active:scale-[0.97]"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-subtle bg-accent/15 hover:bg-accent text-accent hover:text-zinc-950 border border-accent/30 text-xs font-semibold transition-all active:scale-[0.97]"
                 title="Abrir editor sobre la imagen limpia para remover imperfecciones residuales"
               >
                 <Paintbrush className="w-3.5 h-3.5" />

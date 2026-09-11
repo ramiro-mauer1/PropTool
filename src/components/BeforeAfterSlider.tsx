@@ -224,7 +224,7 @@ export function BeforeAfterSlider({
         >
           <img
             src={enhancedUrl || originalUrl}
-            alt="Super-Resolución"
+            alt="Mejora de Fotos"
             className="w-full h-full object-contain pointer-events-none"
             draggable={false}
           />

@@ -23,6 +23,7 @@ export type WorkerCommand = {
       file: File;
       maskData?: ImageData; // Nueva máscara real generada por el usuario
       mockMask?: { x: number; y: number; width: number; height: number };
+      autoMaskBBox?: { x: number; y: number; width: number; height: number };
     }>;
     isCapable: boolean;
   };
@@ -115,13 +116,21 @@ self.addEventListener("message", async (event: MessageEvent<WorkerCommand>) => {
         }
 
         if (!fullMaskData) {
-          // Fallback a mockMask si no hay máscara interactiva provista (Fase 4 legacy)
+          // Fallback a autoMaskBBox o mockMask
           const maskCanvas = new OffscreenCanvas(width, height);
           const maskCtx = maskCanvas.getContext("2d")!;
           maskCtx.fillStyle = "#000000";
           maskCtx.fillRect(0, 0, width, height);
 
-          if (imageInfo.mockMask) {
+          if (imageInfo.autoMaskBBox) {
+            maskCtx.fillStyle = "#FFFFFF";
+            maskCtx.fillRect(
+              imageInfo.autoMaskBBox.x,
+              imageInfo.autoMaskBBox.y,
+              imageInfo.autoMaskBBox.width,
+              imageInfo.autoMaskBBox.height
+            );
+          } else if (imageInfo.mockMask) {
             maskCtx.fillStyle = "#FFFFFF";
             const x = (imageInfo.mockMask.x / 100) * width;
             const y = (imageInfo.mockMask.y / 100) * height;

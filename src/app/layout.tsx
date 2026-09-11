@@ -21,23 +21,23 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  themeColor: "#09090b",
+  themeColor: "#08090a",
   colorScheme: "dark",
 };
 
 export const metadata: Metadata = {
-  title: "PropTool - Inmobiliaria AI Studio",
+  title: "Plinth - Real Estate OS",
   description:
-    "Editor de imagenes profesional con IA para agentes inmobiliarios. Mejora, escala y transforma fotografias de propiedades al instante.",
+    "Editor de imágenes profesional con IA para agentes inmobiliarios. Mejora, escala y transforma fotografías de propiedades al instante.",
   keywords: [
     "inmobiliaria",
-    "editor de imagenes",
+    "editor de imágenes",
     "IA",
     "real estate",
     "photo editor",
     "upscaler",
   ],
-  authors: [{ name: "PropTool" }],
+  authors: [{ name: "Plinth" }],
 };
 
 export default function RootLayout({
@@ -48,7 +48,7 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-[#fbfbf9] dark:bg-[#09090b] text-[#191918] dark:text-[#f4f4f5] min-h-[100dvh] transition-colors duration-150`}
+        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-background text-foreground min-h-[100dvh]`}
       >
         <ToastProvider>{children}</ToastProvider>
       </body>

@@ -40,8 +40,8 @@ export function FeaturesSection({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const stored = (localStorage.getItem("proptool-theme") ||
-      localStorage.getItem("jotatool-theme")) as "light" | "dark" | null;
+    const stored = (localStorage.getItem("plinth-theme") ||
+      localStorage.getItem("plinth-theme")) as "light" | "dark" | null;
     if (stored === "dark") {
       setInternalTheme("dark");
       document.documentElement.classList.add("dark");
@@ -61,7 +61,7 @@ export function FeaturesSection({
     setInternalTheme((prev) => {
       const next = prev === "light" ? "dark" : "light";
       if (typeof window !== "undefined") {
-        localStorage.setItem("proptool-theme", next);
+        localStorage.setItem("plinth-theme", next);
         if (next === "dark") {
           document.documentElement.classList.add("dark");
         } else {
@@ -90,7 +90,7 @@ export function FeaturesSection({
         <header className="flex items-center justify-between pb-5 border-b border-black/[0.06] dark:border-white/[0.08]">
           <div className="flex items-center gap-3">
             <span className="text-xl font-semibold tracking-tight text-[#191918] dark:text-[#f4f4f5]">
-              PropTool
+              Plinth
             </span>
             <span className="hidden sm:inline-flex text-xs text-[#6e6e6b] dark:text-[#a1a1aa] px-2.5 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.03]">
               Edición de fotografía inmobiliaria

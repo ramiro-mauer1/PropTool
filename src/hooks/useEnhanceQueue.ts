@@ -246,7 +246,7 @@ export function useEnhanceQueue(options?: UseEnhanceQueueOptions) {
           }
 
           if (options?.onError) {
-            options.onError(`Error en Super-Resolución: ${error}`);
+            options.onError(`Error en Mejora de Fotos: ${error}`);
           }
 
           // Continuar con el siguiente en cola para no paralizar el lote
@@ -497,7 +497,7 @@ export function useEnhanceQueue(options?: UseEnhanceQueueOptions) {
       const url = URL.createObjectURL(zipBlob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `jotatool_super_resolucion_4x_${new Date().toISOString().slice(0, 10)}.zip`;
+      a.download = `plinth_super_resolucion_4x_${new Date().toISOString().slice(0, 10)}.zip`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

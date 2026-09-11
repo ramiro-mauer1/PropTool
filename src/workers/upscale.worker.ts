@@ -5,7 +5,10 @@ import {
   createTileTensor,
   UpscaleAccumulator,
   calculateAdaptiveDimensions,
+  TILE_SIZE,
+  SCALE_FACTOR
 } from "../utils/tileProcessor";
+import { TextureSynthesizer } from "../utils/textureSynthesizer";
 import type {
   UpscaleWorkerCommand,
   UpscaleWorkerResponse,
@@ -168,6 +171,9 @@ async function processImage(imageId: string, file: File): Promise<void> {
     // 5. Instanciar el acumulador de recomposición
     accumulator = new UpscaleAccumulator(inputWidth, inputHeight);
 
+    // Instanciar el sintetizador de textura (el tamaño máximo de tile es TILE_SIZE, típicamente 256)
+    const textureSynth = new TextureSynthesizer(TILE_SIZE, TILE_SIZE);
+
     const inputName = session.inputNames[0] || "input";
     const outputName = session.outputNames[0] || "output";
 
@@ -226,6 +232,10 @@ async function processImage(imageId: string, file: File): Promise<void> {
       }
 
       const outputData = outputTensor.data as Float32Array;
+
+      // Pasos 4 y 5: Escalar e inyectar grano procedural al output de ONNX
+      // Inyectamos grano sintético fotográfico de alta resolución (evita halos y bloques)
+      textureSynth.injectAndScale(outputData, tile.srcWidth, tile.srcHeight, SCALE_FACTOR, 0.08);
 
       // Generar máscara trapezoidal de pesos Hermite
       const weights = generateTileWeightMask(tile);

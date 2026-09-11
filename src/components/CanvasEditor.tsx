@@ -82,9 +82,9 @@ export function CanvasEditor({
           for (let i = 0; i < priorMask.data.length; i += 4) {
             // Si el pixel en la máscara previa está marcado como blanco
             if (priorMask.data[i] > 127) {
-              amberMaskData.data[i] = 245; // R
-              amberMaskData.data[i + 1] = 158; // G
-              amberMaskData.data[i + 2] = 11; // B
+              amberMaskData.data[i] = 212; // R
+              amberMaskData.data[i + 1] = 255; // G
+              amberMaskData.data[i + 2] = 50; // B
               amberMaskData.data[i + 3] = 130; // Alpha 50%
             }
           }
@@ -96,9 +96,9 @@ export function CanvasEditor({
       // 2. Dibujar cuadro delimitador previo si existe (initialBBox)
       if (bbox) {
         ctx.save();
-        ctx.fillStyle = "rgba(245, 158, 11, 0.42)";
+        ctx.fillStyle = "rgba(212, 255, 50, 0.42)";
         ctx.fillRect(bbox.x, bbox.y, bbox.width, bbox.height);
-        ctx.strokeStyle = "rgba(245, 158, 11, 0.9)";
+        ctx.strokeStyle = "rgba(212, 255, 50, 0.9)";
         ctx.lineWidth = Math.max(2, Math.round(canvas.width / 400));
         ctx.strokeRect(bbox.x, bbox.y, bbox.width, bbox.height);
         ctx.restore();
@@ -108,7 +108,7 @@ export function CanvasEditor({
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.lineWidth = 48; // Grueso para alta resolución
-      ctx.strokeStyle = "rgba(245, 158, 11, 0.5)"; // amber-500 translúcido
+      ctx.strokeStyle = "rgba(212, 255, 50, 0.5)"; // accent translúcido
 
       const drawStroke = (stroke: Stroke) => {
         if (stroke.points.length < 2) return;

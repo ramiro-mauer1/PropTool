@@ -190,7 +190,7 @@ function BatchCard({
           </div>
         ) : (
           <span className="inline-flex items-center gap-2 text-xs font-semibold tracking-tight text-white px-4 py-2.5 rounded-subtle bg-surface/90 border border-border backdrop-blur-md shadow-lg active:scale-[0.97]">
-            <Brush className="w-4 h-4 text-amber-400" />
+            <Brush className="w-4 h-4 text-accent" />
             {bbox ? "Revisar / Editar máscara" : "Pintar máscara"}
           </span>
         )}
@@ -218,10 +218,10 @@ function BatchCard({
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: "spring", stiffness: 300, damping: 20 }}
-            className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-amber-950/80 backdrop-blur-md flex items-center gap-1.5 border border-amber-500/40 shadow-glow z-10"
+            className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-accent/15 backdrop-blur-md flex items-center gap-1.5 border border-accent/20 shadow-glow z-10"
           >
-            <Brush className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-[10px] font-medium text-amber-300 font-mono">Máscara lista</span>
+            <Brush className="w-3.5 h-3.5 text-accent" />
+            <span className="text-[10px] font-medium text-accent font-mono">Máscara lista</span>
           </motion.div>
         )}
       </AnimatePresence>
