@@ -13,9 +13,9 @@ import {
   Wand2,
   Maximize2,
   ShieldCheck,
-  LineChart,
   Users,
   Cpu,
+  ScanSearch,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useHardwareCheck } from "@/hooks/useHardwareCheck";
@@ -35,9 +35,10 @@ import { SendToEnhanceModal } from "@/components/SendToEnhanceModal";
 import { Sidebar, SidebarBody, SidebarLink, Links } from "@/components/ui/sidebar";
 import { StudioDropzone } from "@/components/StudioDropzone";
 import { AnimatedSidebarText } from "@/components/AnimatedSidebarText";
+import { PropertyFinderModule } from "@/components/property-finder";
 
 export default function HomePage() {
-  const [activeModule, setActiveModule] = useState<"inpainting" | "enhance" | "radar" | "crm">("inpainting");
+  const [activeModule, setActiveModule] = useState<"inpainting" | "enhance" | "radar" | "crm" | "finder">("inpainting");
   const [images, setImages] = useState<BatchImage[]>([]);
   const [showEnhanceModal, setShowEnhanceModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -160,6 +161,51 @@ export default function HomePage() {
   const triggerUpload = useCallback(() => {
     fileInputRef.current?.click();
   }, []);
+
+  // Import external property photos into the enhance queue via the image proxy
+  const handleImportFromFinder = useCallback(
+    async (imageUrls: string[]) => {
+      const urlsToFetch = imageUrls.slice(0, 5); // max 5 photos at once
+      const files: File[] = [];
+
+      await Promise.allSettled(
+        urlsToFetch.map(async (url, i) => {
+          try {
+            const proxied = `/api/property-finder/proxy-image?url=${encodeURIComponent(url)}`;
+            const res = await fetch(proxied);
+            if (!res.ok) return;
+            const blob = await res.blob();
+            if (blob.size === 0) return;
+            const ext = blob.type.includes("png") ? "png" : "jpg";
+            files.push(
+              new File([blob], `propiedad-foto-${i + 1}.${ext}`, {
+                type: blob.type || "image/jpeg",
+              })
+            );
+          } catch {
+            console.warn("[Finder] Could not fetch image:", url);
+          }
+        })
+      );
+
+      if (files.length > 0) {
+        await enhanceQueue.addImages(files);
+        setActiveModule("enhance");
+        showToast({
+          title: "Fotos importadas al Studio",
+          message: `${files.length} ${files.length === 1 ? "foto importada" : "fotos importadas"} a Mejora de Fotos.`,
+          type: "success",
+        });
+      } else {
+        showToast({
+          title: "Sin fotos disponibles",
+          message: "No se pudieron descargar las imágenes de esta propiedad.",
+          type: "warning",
+        });
+      }
+    },
+    [enhanceQueue, showToast]
+  );
 
   const handleFilesAdded = useCallback(async (files: File[]) => {
     const newImages: BatchImage[] = await Promise.all(
@@ -354,10 +400,10 @@ export default function HomePage() {
           ) : null,
       },
       {
-        label: "Radar de Mercado",
-        onClick: () => setActiveModule("radar"),
-        active: activeModule === "radar",
-        icon: <LineChart className="w-5 h-5 flex-shrink-0" />,
+        label: "Buscador de Propiedades",
+        onClick: () => setActiveModule("finder"),
+        active: activeModule === "finder",
+        icon: <ScanSearch className="w-5 h-5 flex-shrink-0" />,
       },
       {
         label: "Cartera Inteligente",
@@ -606,6 +652,19 @@ export default function HomePage() {
                   availableCleanCount={availableCleanImages.length}
                   onOpenImportModal={() => setShowEnhanceModal(true)}
                   onBack={() => setActiveModule("inpainting")}
+                />
+              </motion.div>
+            ) : activeModule === "finder" ? (
+              <motion.div
+                key="finder-module"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="flex-1 flex flex-col h-full overflow-hidden"
+              >
+                <PropertyFinderModule
+                  onImportPhotos={handleImportFromFinder}
                 />
               </motion.div>
             ) : (
