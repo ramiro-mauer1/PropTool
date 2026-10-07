@@ -20,6 +20,18 @@ En cada corrida se actualizan los datos del aviso (precio, score, motivo, días 
 
 Nunca se tocan `estado`, `notas`, `contactId`, `propertyId` ni `estadoActualizadoEn`. El `telefono` tampoco se pisa si se compró (`telefonoAdquiridoEn`).
 
+## Mensaje al dueño
+
+`POST /api/captaciones/[id]/mensaje` (sesión) redacta 2 o 3 variantes del primer WhatsApp, una por **ángulo**. Se llama la primera vez que el agente abre "Contactar" en la tarjeta, y de nuevo con "Otras versiones". No guarda nada.
+
+- **Ángulos** (`src/lib/captaciones/mensaje/angulos.ts`, sin IA): se eligen según los datos del buscador, en este orden de prioridad: lo que pide el dueño (ofertas, permuta), precio por m² ≥15% arriba de avisos similares, mucho tiempo publicado o pocas visitas, fotos flojas, recién publicado, alquiler y, siempre, panorama de la zona.
+- **Redacción** (`redactar.ts`): Gemini (`GEMINI_OUTREACH_MODEL`, por defecto `gemini-flash-lite-latest`) escribe con la firma y el tono del agente (`full_name`, `message_tone`).
+- **Validador**: descarta lo que rompa las reglas: 20–85 palabras, una sola pregunta, sin "soy corredor", sin compradores ni datos de mercado inventados, sin prometer trabajo como ya hecho y sin mezclar vos y usted. Si una variante se descarta, se usa una plantilla del mismo ángulo, que cumple las mismas reglas.
+- Si la descripción dice "abstenerse inmobiliarias", la tarjeta lo avisa.
+- El `borrador_mensaje` del buscador solo se usa si falla la red.
+
+Por qué estas reglas: personalizar con datos del aviso multiplica las respuestas; pedir interés ("¿te sirve que te lo mande?") supera a pedir una reunión; los mensajes cortos con una sola pregunta responden más. Además, el precio es la dificultad nº 1 de quien vende sin inmobiliaria (NAR).
+
 ## Compra de teléfono
 
 - Actor: `memo23/zonaprop-scraper`, por `run-sync-get-dataset-items`, con `maxTotalChargeUsd=0.06`.

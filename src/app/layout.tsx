@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { ToastProvider } from "@/components/Toast";
+import { MotionLayoutGroup } from "@/components/MotionLayoutGroup";
 import "./globals.css";
 
 const geistSans = localFont({
@@ -20,7 +21,10 @@ const geistMono = localFont({
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  // Sin maximumScale: el zoom con pinza queda disponible (accesibilidad y
+  // revisión de detalle en las fotos). El auto-zoom de iOS al enfocar un input
+  // se evita forzando 16px en los controles de formulario (globals.css).
+  viewportFit: "cover",
   themeColor: "#08090a",
   colorScheme: "dark",
 };
@@ -50,7 +54,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-background text-foreground min-h-[100dvh]`}
       >
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          <MotionLayoutGroup>{children}</MotionLayoutGroup>
+        </ToastProvider>
       </body>
     </html>
   );

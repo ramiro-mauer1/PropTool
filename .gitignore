@@ -42,3 +42,8 @@ next-env.d.ts
 # onnx models
 public/models/*.onnx
 
+
+# local data samples & tooling
+plinth_muestra_captaciones.json
+/.claude/
+/.impeccable/

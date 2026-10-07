@@ -11,6 +11,7 @@ import {
   ArrowLeftRight,
 } from "lucide-react";
 import { BatchImage } from "@/types/batch";
+import { downloadResult } from "@/lib/settings";
 
 interface ResultModalProps {
   image: BatchImage | null;
@@ -55,14 +56,7 @@ export function ResultModal({
     if (!cleanUrl || !image) return;
 
     const fileName = image.file.name.replace(/\.[^/.]+$/, "");
-    const downloadName = `${fileName}_limpia.png`;
-
-    const a = document.createElement("a");
-    a.href = cleanUrl;
-    a.download = downloadName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    void downloadResult(cleanUrl, `${fileName}_limpia`);
   }, [cleanUrl, image]);
 
   if (!isOpen || !image) return null;

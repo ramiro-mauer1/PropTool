@@ -15,7 +15,8 @@ import {
   ShieldCheck,
   Users,
   Cpu,
-  ScanSearch,
+  MoreHorizontal,
+  Radar,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useHardwareCheck } from "@/hooks/useHardwareCheck";
@@ -36,49 +37,58 @@ import { Sidebar, SidebarBody, SidebarLink, Links } from "@/components/ui/sideba
 import { StudioDropzone } from "@/components/StudioDropzone";
 import { AnimatedSidebarText } from "@/components/AnimatedSidebarText";
 import { PropertyFinderModule } from "@/components/property-finder";
+import { CrmAssistantModule } from "@/components/crm-assistant";
+import { CaptacionesModule } from "@/components/captaciones";
+import { ProfileMenu, LoginView, WelcomeFlow } from "@/components/auth";
+import { MobileModuleSwitcher } from "@/components/MobileModuleSwitcher";
+import { useAuthUser } from "@/hooks/useAuthUser";
+import { downloadResult, useDeviceSettings } from "@/lib/settings";
 
 export default function HomePage() {
-  const [activeModule, setActiveModule] = useState<"inpainting" | "enhance" | "radar" | "crm" | "finder">("inpainting");
+  const [activeModule, setActiveModule] = useState<"inpainting" | "enhance" | "captaciones" | "crm" | "finder">("inpainting");
   const [images, setImages] = useState<BatchImage[]>([]);
   const [showEnhanceModal, setShowEnhanceModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [theme, setTheme] = useState<"light" | "dark">("dark");
+  // Menú de acciones secundarias del lote (sólo móvil: en escritorio los
+  // botones entran todos en la barra).
+  const [batchMenuOpen, setBatchMenuOpen] = useState(false);
 
+  const { user: authUser, isLoading: authLoading, refresh: refreshAuth } = useAuthUser();
+  // The shared layoutId only needs to drive the one-time "fly from login
+  // into the sidebar" entrance. Left attached permanently, it fights with
+  // PlinthBrand's own width animation every time the sidebar is toggled
+  // open/closed afterwards (two competing layout-animation systems on the
+  // same subtree), which made the logo vanish — so it's detached once the
+  // entrance settles.
+  const [logoDocked, setLogoDocked] = useState(false);
+  const inApp = !!authUser && !authUser.needsOnboarding;
+  useEffect(() => {
+    if (!inApp) {
+      setLogoDocked(false);
+      return;
+    }
+    const t = setTimeout(() => setLogoDocked(true), 700);
+    return () => clearTimeout(t);
+  }, [inApp]);
+
+  // Abre la herramienta de inicio elegida por el agente, una vez por sesión.
+  const startModuleApplied = useRef(false);
+  useEffect(() => {
+    if (!authUser) {
+      startModuleApplied.current = false;
+      return;
+    }
+    if (startModuleApplied.current || authUser.needsOnboarding) return;
+    startModuleApplied.current = true;
+    if (authUser.startModule) setActiveModule(authUser.startModule);
+  }, [authUser]);
   const hardware = useHardwareCheck();
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Inicialización y persistencia de tema
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const stored = (localStorage.getItem("plinth-theme") || "dark") as "light" | "dark";
-    setTheme(stored);
-    if (stored === "dark") {
-      document.documentElement.classList.add("dark");
-      document.documentElement.classList.remove("light");
-    } else {
-      document.documentElement.classList.add("light");
-      document.documentElement.classList.remove("dark");
-    }
-  }, []);
-
-  const toggleTheme = useCallback(() => {
-    setTheme((prev) => {
-      const next = prev === "light" ? "dark" : "light";
-      if (typeof window !== "undefined") {
-        localStorage.setItem("plinth-theme", next);
-        if (next === "dark") {
-          document.documentElement.classList.add("dark");
-          document.documentElement.classList.remove("light");
-        } else {
-          document.documentElement.classList.add("light");
-          document.documentElement.classList.remove("dark");
-        }
-      }
-      return next;
-    });
-  }, []);
+  // Aplica el tema guardado (claro/oscuro/sistema) y sigue sus cambios desde Configuración.
+  useDeviceSettings();
   
   const {
     isProcessing,
@@ -282,6 +292,17 @@ export default function HomePage() {
     setImages([]);
   }, [images, isProcessing, cancelBatch, clearData]);
 
+  const handleDownloadAllClean = useCallback(() => {
+    processedIds.forEach((id) => {
+      const url = cleanUrls[id];
+      const img = images.find((i) => i.id === id);
+      if (url && img) {
+        const fileName = img.file.name.replace(/\.[^/.]+$/, "");
+        void downloadResult(url, `${fileName}_limpia`);
+      }
+    });
+  }, [processedIds, cleanUrls, images]);
+
   const handleProcessBatch = useCallback(async () => {
     let currentImages = images;
 
@@ -376,6 +397,18 @@ export default function HomePage() {
   const sidebarLinks: Links[] = useMemo(
     () => [
       {
+        label: "Captaciones",
+        onClick: () => setActiveModule("captaciones"),
+        active: activeModule === "captaciones",
+        icon: <Radar className="w-5 h-5 flex-shrink-0" />,
+      },
+      {
+        label: "Cartera Inteligente",
+        onClick: () => setActiveModule("crm"),
+        active: activeModule === "crm",
+        icon: <Users className="w-5 h-5 flex-shrink-0" />,
+      },
+      {
         label: "Limpieza Inteligente",
         onClick: () => setActiveModule("inpainting"),
         active: activeModule === "inpainting",
@@ -388,7 +421,7 @@ export default function HomePage() {
           ) : null,
       },
       {
-        label: "Mejora de Fotos 4x",
+        label: "Mejora de Fotos",
         onClick: () => setActiveModule("enhance"),
         active: activeModule === "enhance",
         icon: <Maximize2 className="w-5 h-5 flex-shrink-0" />,
@@ -399,26 +432,31 @@ export default function HomePage() {
             </span>
           ) : null,
       },
-      {
-        label: "Buscador de Propiedades",
-        onClick: () => setActiveModule("finder"),
-        active: activeModule === "finder",
-        icon: <ScanSearch className="w-5 h-5 flex-shrink-0" />,
-      },
-      {
-        label: "Cartera Inteligente",
-        onClick: () => setActiveModule("crm"),
-        active: activeModule === "crm",
-        icon: <Users className="w-5 h-5 flex-shrink-0" />,
-      },
     ],
     [activeModule, images.length, enhanceQueue.queue.length]
   );
 
 
 
+
+  if (authLoading) {
+    return <div className="min-h-[100dvh] w-full bg-[#09090B]" />;
+  }
+
   return (
-    <div className="h-[100dvh] w-full flex flex-col md:flex-row overflow-hidden bg-[#FAFAFA] dark:bg-[#09090B] text-[#18181B] dark:text-[#FAFAFA] transition-colors duration-150">
+    <AnimatePresence mode="wait" initial={false}>
+      {!authUser ? (
+        <LoginView key="login" onSuccess={refreshAuth} />
+      ) : authUser.needsOnboarding ? (
+        <WelcomeFlow key="welcome" user={authUser} onDone={() => void refreshAuth()} />
+      ) : (
+        <motion.div
+          key="app"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
+          className="h-[100dvh] w-full flex flex-col md:flex-row overflow-hidden bg-[#FAFAFA] dark:bg-[#09090B] text-[#18181B] dark:text-[#FAFAFA] transition-colors duration-150"
+        >
       {/* Input de subida unificado */}
       <input
         ref={fileInputRef}
@@ -445,11 +483,25 @@ export default function HomePage() {
 
       {/* ================= SIDEBAR ANIMADO ================= */}
       <Sidebar open={sidebarOpen} setOpen={setSidebarOpen}>
-        <SidebarBody className="justify-between gap-6 bg-[#0f1115] border-white/[0.08]">
+        <SidebarBody
+          className="justify-between gap-6 bg-[#0f1115] border-white/[0.08]"
+          mobileHeader={
+            <div className="flex items-center gap-3 min-w-0">
+              <PlinthBrand isCollapsed={false} className="h-6 text-white shrink-0" />
+              <MobileModuleSwitcher links={sidebarLinks} />
+            </div>
+          }
+        >
           <div className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden">
             {/* Logo y Marca */}
-            <div className={`flex items-center select-none mb-6 transition-all duration-300 ${sidebarOpen ? 'justify-start px-6 py-5' : 'justify-center px-0 py-5'}`}>
-              <PlinthBrand isCollapsed={!sidebarOpen} className="h-7 text-white" />
+            <div className={`flex items-center select-none mb-6 transition-all duration-300 ${sidebarOpen ? 'justify-start px-2.5 py-5' : 'justify-center px-0 py-5'}`}>
+              <motion.div
+                layoutId={logoDocked ? undefined : "plinth-logo"}
+                transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
+                className="h-7"
+              >
+                <PlinthBrand isCollapsed={!sidebarOpen} className="h-full text-white" />
+              </motion.div>
             </div>
 
             {/* Módulos Principales */}
@@ -461,40 +513,11 @@ export default function HomePage() {
                 <SidebarLink key={idx} link={link} />
               ))}
             </div>
-
-            <div className="mt-4 px-2">
-              <button
-                onClick={triggerUpload}
-                className={`w-full bg-transparent border border-[#d4ff32]/30 text-[#d4ff32] hover:bg-[#d4ff32]/10 font-semibold text-sm py-2 rounded-lg transition-all duration-300 active:scale-[0.98] flex items-center overflow-hidden ${
-                  sidebarOpen ? "px-3 gap-3 justify-start" : "px-0 justify-center border-transparent"
-                }`}
-              >
-                <Upload className="w-4 h-4 flex-shrink-0" />
-                <motion.div
-                  initial={false}
-                  animate={{ 
-                    width: sidebarOpen ? "auto" : 0, 
-                    opacity: sidebarOpen ? 1 : 0 
-                  }}
-                  transition={{ duration: 0.45, ease: [0.25, 1, 0.5, 1] }}
-                  className="whitespace-nowrap overflow-hidden"
-                >
-                  Subir Lote
-                </motion.div>
-              </button>
-            </div>
-
-
           </div>
 
-          {/* Footer de Salud */}
+          {/* Perfil del agente */}
           <div className="border-t border-white/[0.08] pt-3">
-            <div className="flex items-center gap-3 px-3 py-2 bg-white/[0.02] rounded-lg border border-white/[0.04]">
-              <div className="w-2 h-2 rounded-full bg-[#d4ff32] shadow-[0_0_8px_rgba(212,255,50,0.6)] animate-pulse flex-shrink-0" />
-              <AnimatedSidebarText className="text-[11px] text-[#8f96a3] font-medium whitespace-nowrap">
-                Inferencia Local Activa
-              </AnimatedSidebarText>
-            </div>
+            <ProfileMenu user={authUser} onProfileUpdated={refreshAuth} />
           </div>
         </SidebarBody>
       </Sidebar>
@@ -503,40 +526,53 @@ export default function HomePage() {
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative">
         {/* Barra de acción contextual superior (solo cuando hay fotos en Inpainting) */}
         {activeModule === "inpainting" && images.length > 0 && (
-          <div className="h-12 border-b border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between px-4 sm:px-6 bg-white/95 dark:bg-[#18181B]/95 backdrop-blur-sm shrink-0 z-20">
+          <div className="h-12 border-b border-[#E4E4E7] dark:border-[#27272A] flex items-center justify-between gap-2 px-3 sm:px-6 bg-white/95 dark:bg-[#18181B]/95 backdrop-blur-sm shrink-0 z-20">
             {/* Métricas del lote */}
-            <div className="flex items-center gap-3 text-xs">
+            <div className="flex items-center gap-2 sm:gap-3 text-xs min-w-0">
               <button
                 type="button"
                 onClick={clearBatch}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-100 dark:bg-[#27272A] hover:bg-zinc-200 dark:hover:bg-[#323238] border border-zinc-200 dark:border-zinc-700 text-xs font-medium text-zinc-700 dark:text-zinc-300 transition-colors group active:scale-[0.98]"
+                className="flex items-center gap-1.5 h-9 sm:h-8 px-2.5 shrink-0 rounded-md bg-zinc-100 dark:bg-[#27272A] hover:bg-zinc-200 dark:hover:bg-[#323238] border border-zinc-200 dark:border-zinc-700 text-xs font-medium text-zinc-700 dark:text-zinc-300 transition-colors group active:scale-[0.98]"
                 title="Volver al inicio"
+                aria-label="Volver al inicio"
               >
                 <ChevronLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
-                <span>Inicio</span>
+                <span className="hidden sm:inline">Inicio</span>
               </button>
-              <span className="font-semibold text-[#18181B] dark:text-[#FAFAFA]">
-                Lote de {images.length} {images.length === 1 ? "foto" : "fotos"}
+
+              <span className="font-semibold text-[#18181B] dark:text-[#FAFAFA] truncate">
+                <span className="hidden sm:inline">Lote de </span>
+                {images.length} {images.length === 1 ? "foto" : "fotos"}
               </span>
-              <span className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700" />
-              <div className="flex items-center gap-2 text-2xs font-mono tabular-nums text-zinc-500 dark:text-zinc-400">
+
+              <span className="hidden xs:block w-1 h-1 shrink-0 rounded-full bg-zinc-300 dark:bg-zinc-700" />
+
+              <div className="hidden xs:flex items-center gap-2 text-2xs font-mono tabular-nums text-zinc-500 dark:text-zinc-400 shrink-0">
                 <span className="flex items-center gap-1 text-accent font-semibold">
                   <CheckCircle2 className="w-3 h-3" />
-                  {processedIds.length} limpias
+                  {processedIds.length}
+                  <span className="hidden md:inline">limpias</span>
                 </span>
-                <span>•</span>
-                <span className={pendingCount > 0 ? "text-zinc-700 dark:text-zinc-300 font-medium" : "text-zinc-400"}>
+                <span className="hidden md:inline">•</span>
+                <span
+                  className={`hidden md:inline ${
+                    pendingCount > 0
+                      ? "text-zinc-700 dark:text-zinc-300 font-medium"
+                      : "text-zinc-400"
+                  }`}
+                >
                   {pendingCount} pendientes
                 </span>
               </div>
             </div>
 
             {/* Acciones principales de lote */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              {/* Agregar — en móvil vive dentro del menú "⋯" */}
               <button
                 type="button"
                 onClick={triggerUpload}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white dark:bg-[#27272A] hover:bg-zinc-50 dark:hover:bg-[#323238] border border-zinc-300 dark:border-zinc-700 text-xs font-medium text-[#18181B] dark:text-[#FAFAFA] hover:border-accent transition-colors active:scale-[0.98]"
+                className="hidden md:flex items-center gap-1.5 h-8 px-3 rounded-md bg-white dark:bg-[#27272A] hover:bg-zinc-50 dark:hover:bg-[#323238] border border-zinc-300 dark:border-zinc-700 text-xs font-medium text-[#18181B] dark:text-[#FAFAFA] hover:border-accent transition-colors active:scale-[0.98]"
                 title="Agregar más fotografías al lote"
               >
                 <Upload className="w-3.5 h-3.5 text-zinc-500" />
@@ -548,7 +584,7 @@ export default function HomePage() {
                 type="button"
                 onClick={handleProcessBatch}
                 disabled={isProcessing || isAllProcessed}
-                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-semibold shadow-2xs transition-all active:scale-[0.98] ${
+                className={`flex items-center justify-center gap-1.5 h-9 sm:h-8 px-3 sm:px-4 rounded-md text-xs font-semibold shadow-2xs transition-all active:scale-[0.98] ${
                   isProcessing
                     ? "bg-accent/80 text-zinc-950 cursor-wait"
                     : isAllProcessed
@@ -565,18 +601,23 @@ export default function HomePage() {
               >
                 {isProcessing ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Limpiando marca de agua...</span>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                    <span className="hidden sm:inline">Limpiando marca de agua...</span>
+                    <span className="sm:hidden">Limpiando…</span>
                   </>
                 ) : isAllProcessed ? (
                   <>
-                    <CheckCircle2 className="w-3.5 h-3.5 text-accent" />
-                    <span>Lote completado</span>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-accent shrink-0" />
+                    <span className="hidden sm:inline">Lote completado</span>
+                    <span className="sm:hidden">Listo</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-3.5 h-3.5 fill-current" />
-                    <span>Limpiar Marca de Agua ({pendingCount})</span>
+                    <Sparkles className="w-3.5 h-3.5 fill-current shrink-0" />
+                    <span className="hidden lg:inline">
+                      Limpiar Marca de Agua ({pendingCount})
+                    </span>
+                    <span className="lg:hidden">Limpiar ({pendingCount})</span>
                   </>
                 )}
               </button>
@@ -586,11 +627,11 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={() => setShowEnhanceModal(true)}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-white dark:bg-[#27272A] hover:bg-zinc-50 dark:hover:bg-[#323238] border border-zinc-300 dark:border-zinc-700 text-xs font-medium text-[#18181B] dark:text-[#FAFAFA] hover:border-accent hover:text-accent transition-colors active:scale-[0.98]"
+                  className="hidden md:flex items-center gap-1.5 h-8 px-3.5 rounded-md bg-white dark:bg-[#27272A] hover:bg-zinc-50 dark:hover:bg-[#323238] border border-zinc-300 dark:border-zinc-700 text-xs font-medium text-[#18181B] dark:text-[#FAFAFA] hover:border-accent hover:text-accent transition-colors active:scale-[0.98]"
                   title="Transferir imágenes limpiadas a Mejora de Fotos"
                 >
                   <FolderSync className="w-3.5 h-3.5 text-accent" />
-                  <span>Enviar a 4x ({processedIds.length})</span>
+                  <span>Enviar a Mejora ({processedIds.length})</span>
                 </button>
               )}
 
@@ -598,22 +639,8 @@ export default function HomePage() {
               {processedIds.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => {
-                    processedIds.forEach((id) => {
-                      const url = cleanUrls[id];
-                      const img = images.find((i) => i.id === id);
-                      if (url && img) {
-                        const fileName = img.file.name.replace(/\.[^/.]+$/, "");
-                        const a = document.createElement("a");
-                        a.href = url;
-                        a.download = `${fileName}_limpia.png`;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                      }
-                    });
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-accent/10 hover:bg-accent/20 text-accent border border-accent/30 text-xs font-semibold transition-colors active:scale-[0.98]"
+                  onClick={handleDownloadAllClean}
+                  className="hidden md:flex items-center gap-1.5 h-8 px-3 rounded-md bg-accent/10 hover:bg-accent/20 text-accent border border-accent/30 text-xs font-semibold transition-colors active:scale-[0.98]"
                   title="Descargar todas las fotos limpiadas"
                 >
                   <Download className="w-3.5 h-3.5" />
@@ -626,11 +653,108 @@ export default function HomePage() {
                 type="button"
                 onClick={clearBatch}
                 disabled={isProcessing}
-                className="p-1.5 rounded-md text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 border border-transparent hover:border-red-200 dark:hover:border-red-900 transition-colors disabled:opacity-40"
+                className="hidden md:flex items-center justify-center w-8 h-8 rounded-md text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 border border-transparent hover:border-red-200 dark:hover:border-red-900 transition-colors disabled:opacity-40"
                 title="Vaciar lote actual"
+                aria-label="Vaciar lote actual"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
+
+              {/* ── Menú de acciones secundarias (móvil / tablet) ─────────── */}
+              <div className="relative md:hidden">
+                <button
+                  type="button"
+                  onClick={() => setBatchMenuOpen((v) => !v)}
+                  aria-haspopup="menu"
+                  aria-expanded={batchMenuOpen}
+                  aria-label="Más acciones del lote"
+                  className="flex items-center justify-center w-10 h-9 sm:w-9 sm:h-8 rounded-md bg-zinc-100 dark:bg-[#27272A] hover:bg-zinc-200 dark:hover:bg-[#323238] border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 transition-colors active:scale-[0.98]"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </button>
+
+                <AnimatePresence>
+                  {batchMenuOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-[60]"
+                        onClick={() => setBatchMenuOpen(false)}
+                      />
+                      <motion.div
+                        role="menu"
+                        initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                        transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+                        className="absolute right-0 top-full mt-2 w-60 max-w-[calc(100vw-1.5rem)] z-[70] origin-top-right rounded-xl border border-zinc-200 dark:border-[#27272A] bg-white dark:bg-[#18181B] shadow-2xl overflow-hidden p-1.5"
+                      >
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setBatchMenuOpen(false);
+                            triggerUpload();
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium text-[#18181B] dark:text-[#FAFAFA] hover:bg-zinc-100 dark:hover:bg-[#27272A] transition-colors text-left"
+                        >
+                          <Upload className="w-4 h-4 shrink-0 text-zinc-500" />
+                          <span>Agregar fotos</span>
+                        </button>
+
+                        {processedIds.length > 0 && (
+                          <>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => {
+                                setBatchMenuOpen(false);
+                                setShowEnhanceModal(true);
+                              }}
+                              className="w-full flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium text-[#18181B] dark:text-[#FAFAFA] hover:bg-zinc-100 dark:hover:bg-[#27272A] transition-colors text-left"
+                            >
+                              <FolderSync className="w-4 h-4 shrink-0 text-accent" />
+                              <span className="truncate">
+                                Enviar a Mejora ({processedIds.length})
+                              </span>
+                            </button>
+
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => {
+                                setBatchMenuOpen(false);
+                                handleDownloadAllClean();
+                              }}
+                              className="w-full flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-semibold text-accent hover:bg-accent/10 transition-colors text-left"
+                            >
+                              <Download className="w-4 h-4 shrink-0" />
+                              <span className="truncate">
+                                Descargar limpias ({processedIds.length})
+                              </span>
+                            </button>
+                          </>
+                        )}
+
+                        <div className="my-1 h-px bg-zinc-200 dark:bg-[#27272A]" />
+
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setBatchMenuOpen(false);
+                            clearBatch();
+                          }}
+                          disabled={isProcessing}
+                          className="w-full flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors disabled:opacity-40 text-left"
+                        >
+                          <Trash2 className="w-4 h-4 shrink-0" />
+                          <span>Vaciar lote</span>
+                        </button>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           </div>
         )}
@@ -653,6 +777,28 @@ export default function HomePage() {
                   onOpenImportModal={() => setShowEnhanceModal(true)}
                   onBack={() => setActiveModule("inpainting")}
                 />
+              </motion.div>
+            ) : activeModule === "crm" ? (
+              <motion.div
+                key="crm-module"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="flex-1 flex flex-col h-full overflow-hidden"
+              >
+                <CrmAssistantModule agentName={authUser?.name ?? null} preferredName={authUser?.preferredName || null} />
+              </motion.div>
+            ) : activeModule === "captaciones" ? (
+              <motion.div
+                key="captaciones-module"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="flex-1 flex flex-col h-full overflow-hidden"
+              >
+                <CaptacionesModule agentName={authUser?.name ?? null} />
               </motion.div>
             ) : activeModule === "finder" ? (
               <motion.div
@@ -744,7 +890,7 @@ export default function HomePage() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white dark:bg-[#18181B] border border-[#E4E4E7] dark:border-[#27272A] p-6 rounded-2xl max-w-md w-full shadow-2xl space-y-4"
+              className="bg-white dark:bg-[#18181B] border border-[#E4E4E7] dark:border-[#27272A] p-5 sm:p-6 rounded-2xl max-w-md w-full shadow-2xl space-y-4 max-h-[85dvh] overflow-y-auto overscroll-contain"
             >
               <div className="flex items-center justify-between border-b border-[#E4E4E7] dark:border-[#27272A] pb-3">
                 <div className="flex items-center gap-2">
@@ -768,17 +914,17 @@ export default function HomePage() {
                 <div>
                   <h4 className="font-semibold text-[#18181B] dark:text-[#FAFAFA] mb-1 flex items-center gap-1.5">
                     <Wand2 className="w-3.5 h-3.5 text-accent" />
-                    Limpieza de Marcas (Inpainting LaMa)
+                    Limpieza de Marcas
                   </h4>
                   <p>
-                    Detección automática de sellos de agua con ONNX y borrado con LaMa cuantizado. Podés retocar cualquier máscara con el pincel interactivo antes de procesar el lote completo.
+                    Detecta las marcas de agua y las borra solo. Podés retocar cualquier máscara con el pincel interactivo antes de procesar el lote completo.
                   </p>
                 </div>
 
                 <div>
                   <h4 className="font-semibold text-[#18181B] dark:text-[#FAFAFA] mb-1 flex items-center gap-1.5">
                     <Maximize2 className="w-3.5 h-3.5 text-accent" />
-                    Mejora de Fotos 4x (Real-ESRGAN)
+                    Mejora de Fotos
                   </h4>
                   <p>
                     Reconstruye detalles, líneas nítidas y texturas de fotos de baja resolución o comprimidas, con comparador interactivo antes/después.
@@ -799,6 +945,8 @@ export default function HomePage() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

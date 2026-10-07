@@ -29,6 +29,39 @@
     color-scheme: dark;
   }
 
+  /* Captaciones: tinta de acento para texto (el lima #d4ff32 sólo se lee
+     sobre fondo oscuro o como relleno con texto oscuro encima). */
+  .captaciones-scope,
+  .settings-scope {
+    --cap-accent-ink: var(--color-accent);
+    /* El muted global (70% de alfa) queda en ~3.7:1 sobre la superficie;
+       acá se usa para metadatos en 11px, así que se sube a ≥4.5:1. */
+    --color-text-muted: #7c838f;
+  }
+
+  /* Captaciones y Configuración en tema claro. Los tokens globales sólo
+     existen en oscuro; se redefinen acá con alcance al módulo para no
+     alterar los demás. */
+  html.light .captaciones-scope,
+  html.light .settings-scope {
+    --color-bg-base: #fafafa;
+    --color-surface-sunken: #f4f4f5;
+    --color-surface: #ffffff;
+    --color-surface-raised: #f4f4f5;
+    --color-surface-overlay: #ffffff;
+    --color-border: #e4e4e7;
+    --color-border-subtle: #f0f0f2;
+    --color-border-hover: #a1a1aa;
+    --color-text-primary: #18181b;
+    --color-text-secondary: #52525b;
+    --color-text-muted: #71717a;
+    --color-accent-muted: rgba(132, 168, 0, 0.16);
+    --color-accent-subtle: rgba(132, 168, 0, 0.08);
+    --color-error-muted: rgba(220, 38, 38, 0.1);
+    --cap-accent-ink: #4d6400;
+    color-scheme: light;
+  }
+
   *,
   *::before,
   *::after {
@@ -39,6 +72,8 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    /* Evita que Safari/iOS reescale la tipografía al rotar el dispositivo */
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
@@ -46,6 +81,25 @@
     color: var(--color-text-primary);
     font-feature-settings: "rlig" 1, "calt" 1, "cv02" 1, "cv03" 1, "cv04" 1;
     overflow-x: hidden;
+    /* Sin rebote elástico: la app es una shell fija de 100dvh */
+    overscroll-behavior: none;
+  }
+
+  /* Sin destello gris al tocar en Android/iOS y sin retardo de 300ms */
+  a,
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea,
+  label {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  a,
+  button,
+  [role="button"] {
+    touch-action: manipulation;
   }
 
   ::selection {
@@ -131,7 +185,7 @@
   .text-balance {
     text-wrap: balance;
   }
-  
+
   .tabular-nums {
     font-variant-numeric: tabular-nums;
   }
@@ -139,5 +193,64 @@
   /* Subtle background radial glow */
   .radial-glow-accent {
     background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.08) 0%, transparent 70%);
+  }
+
+  /* Carriles deslizables horizontales (barras de herramientas en móvil) */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Inercia nativa al deslizar en iOS */
+  .scroll-touch {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Respeto del notch y de la barra de gestos. Llevan un mínimo incorporado
+     para poder usarse EN LUGAR de (no junto a) las utilidades de padding de
+     Tailwind, que de otro modo entrarían en conflicto. */
+  .px-safe {
+    padding-left: max(env(safe-area-inset-left, 0px), 0.75rem);
+    padding-right: max(env(safe-area-inset-right, 0px), 0.75rem);
+  }
+  .pb-safe {
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.75rem);
+  }
+}
+
+/* ============================================================
+   Ajustes táctiles — sólo móvil
+   ============================================================ */
+
+/* iOS hace zoom automático al enfocar un campo con tipografía < 16px.
+   Como las utilidades text-xs/text-sm ganan por especificidad de capa,
+   esto se fuerza fuera de @layer. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Amplía el área táctil de los controles chicos (íconos de 14-16px) hasta los
+   44px recomendados, sin cambiar su tamaño visual ni el layout. Se aplica sólo
+   en dispositivos táctiles y a los elementos marcados con .tap-target. */
+@media (hover: none) and (pointer: coarse) {
+  .tap-target {
+    position: relative;
+  }
+
+  .tap-target::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
   }
 }

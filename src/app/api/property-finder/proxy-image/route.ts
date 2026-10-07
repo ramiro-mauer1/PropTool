@@ -39,13 +39,17 @@ export async function GET(request: NextRequest): Promise<Response> {
     'img.argenprop.com',
     'img.properati.com',
     'photos.zonaprop.com',
+    'img.icasas.com.ar',
   ];
 
   const isAllowed =
     ALLOWED_HOSTS.some((h) => parsed.hostname === h || parsed.hostname.endsWith(`.${h}`)) ||
     parsed.hostname.endsWith('.mlstatic.com') ||
     parsed.hostname.endsWith('.zonaprop.com') ||
-    parsed.hostname.endsWith('.argenprop.com');
+    parsed.hostname.endsWith('.argenprop.com') ||
+    parsed.hostname.endsWith('.properati.com') ||
+    parsed.hostname.endsWith('.properati.com.ar') ||
+    parsed.hostname.endsWith('.icasas.com.ar');
 
   if (!isAllowed) {
     // For unknown hosts, still try to proxy — property portals vary

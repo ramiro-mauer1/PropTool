@@ -144,9 +144,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={{ showToast, removeToast }}>
       {children}
       
-      <div 
+      <div
         aria-live="polite"
-        className="fixed bottom-6 right-6 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 sm:px-0"
+        className="fixed z-[200] flex flex-col gap-2.5 pointer-events-none left-3 right-3 bottom-3 mb-[env(safe-area-inset-bottom,0px)] sm:left-auto sm:right-6 sm:bottom-6 sm:w-full sm:max-w-sm"
       >
         <AnimatePresence mode="popLayout">
           {toasts.map((toast) => {
