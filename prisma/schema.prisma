@@ -1,0 +1,211 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Pooled (Supavisor transaction pooler, port 6543) — used at runtime.
+  url       = env("DATABASE_URL")
+  // Direct connection (port 5432) — required for migrations, which the
+  // pooler doesn't support (prepared statements / DDL).
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Auth ───────────────────────────────────────────────────────────────────
+// Invite-only allowlist: Supabase Auth handles credentials/sessions, but
+// account creation (in /api/auth/continue) only succeeds for an email the
+// owner has added here first. Managed directly in Supabase Studio's table
+// editor for now — no in-app admin UI yet.
+
+model AllowedEmail {
+  id      String   @id @default(cuid())
+  email   String   @unique
+  addedAt DateTime @default(now())
+}
+
+// ─── CRM Assistant ──────────────────────────────────────────────────────────
+// Data model for the "asistente con IA" feature: an agent describes an
+// interaction with a client in natural language, Gemini extracts structured
+// fields, the agent confirms, and the app persists the lead update +
+// interaction + a follow-up task with a computed due date.
+
+enum LeadStatus {
+  nuevo
+  contactado
+  indeciso
+  interesado
+  negociacion
+  cerrado_ganado
+  cerrado_perdido
+}
+
+enum Urgency {
+  baja
+  media
+  alta
+}
+
+enum InteractionOrigin {
+  texto
+  voz
+}
+
+enum FollowupStatus {
+  pendiente
+  hecho
+}
+
+enum FollowupChannel {
+  whatsapp
+  llamada
+  email
+}
+
+model Contact {
+  id               String     @id @default(cuid())
+  name             String
+  phone            String?
+  email            String?
+  leadStatus       LeadStatus @default(nuevo)
+  temperatureScore Int        @default(0) // 0-100, derived from urgency history
+  lastContactAt    DateTime?
+  assignedAgent    String? // plain text for now; becomes a User relation once auth lands
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  interactions  Interaction[]
+  followupTasks FollowupTask[]
+  captaciones   Captacion[]
+
+  @@index([name])
+}
+
+model Property {
+  id            String   @id @default(cuid())
+  addressOrZone String
+  type          String?
+  price         Float?
+  currency      String? // "USD" | "ARS"; set when the property comes from a Captacion
+  status        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  interactions Interaction[]
+  captaciones  Captacion[]
+
+  @@index([addressOrZone])
+}
+
+model Interaction {
+  id             String            @id @default(cuid())
+  // Generated client-side once per confirmation card and replayed on
+  // retry/double-click; lets /confirm be safely called more than once for
+  // the same interaction without creating duplicate rows.
+  idempotencyKey String            @unique
+  contactId      String?
+  contact        Contact?          @relation(fields: [contactId], references: [id])
+  propertyId     String?
+  property       Property?         @relation(fields: [propertyId], references: [id])
+  origin         InteractionOrigin
+  rawText        String // original text, or transcript if origin = voz
+  extractedJson  Json // the raw Gemini extraction output, kept for audit/debugging
+  urgency        Urgency
+  summary        String
+  agent          String? // plain text for now; see Contact.assignedAgent
+  createdAt      DateTime          @default(now())
+
+  followupTask FollowupTask?
+
+  @@index([contactId])
+  @@index([propertyId])
+}
+
+model FollowupTask {
+  id               String          @id @default(cuid())
+  interactionId    String          @unique
+  interaction      Interaction     @relation(fields: [interactionId], references: [id])
+  contactId        String
+  contact          Contact         @relation(fields: [contactId], references: [id])
+  dueAt            DateTime
+  status           FollowupStatus  @default(pendiente)
+  suggestedMessage String
+  channel          FollowupChannel @default(whatsapp)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([contactId])
+  @@index([status, dueAt])
+}
+
+// ─── Captaciones ────────────────────────────────────────────────────────────
+// Owner-direct listings detected weekly by an external search job and pushed
+// to /api/captaciones/import. Field names mirror the job's snake_case
+// contract (see plinth_muestra_captaciones.json), mapped to camelCase here.
+// The import upserts by `clave` and only refreshes listing data — everything
+// under "Seguimiento" is the broker's work and is never overwritten by it.
+
+enum CaptacionEstado {
+  nuevo
+  contactado
+  respondio
+  tasacion
+  captado
+  descartado
+  cerrado
+}
+
+model Captacion {
+  id                    String    @id @default(cuid())
+  clave                 String    @unique // "<portal>:<id del aviso>", identity across runs
+  portal                String
+  url                   String
+  operacion             String
+  tipo                  String
+  precio                Float?
+  moneda                String?
+  m2Cubiertos           Float?
+  m2Total               Float?
+  ambientes             Float?
+  direccion             String?
+  localidad             String
+  partido               String
+  lat                   Float?
+  lon                   Float?
+  anunciante            String?
+  telefono              String?
+  tieneWhatsappEnPortal Boolean?
+  fotoUrl               String?
+  score                 Int
+  motivo                String // "; "-separated reasons with their points, e.g. "27 días publicado (+6)"
+  senales               String[]
+  barrioPrivado         Boolean   @default(false)
+  problemasAviso        String[]
+  borradorMensaje       String?
+  diasPublicado         Int?
+  visitas               Int?
+  fechaPublicacion      DateTime? @db.Date
+  descripcion           String?
+
+  // Seguimiento
+  estado                   CaptacionEstado @default(nuevo)
+  notas                    String?
+  estadoActualizadoEn      DateTime        @default(now())
+  telefonoAdquiridoEn      DateTime? // phone bought via Apify; never buy again
+  telefonoIntentadoEn      DateTime? // bought, but Zonaprop had no phone for the listing
+  telefonoCompraIniciadaEn DateTime? // in-flight purchase lock (stale after a few minutes)
+  primeraVezVista          DateTime        @default(now())
+  ultimaVezVista           DateTime        @default(now())
+  corridaId                String
+  contactId                String?
+  contact                  Contact?        @relation(fields: [contactId], references: [id])
+  propertyId               String?
+  property                 Property?       @relation(fields: [propertyId], references: [id])
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
+
+  @@index([estado, score])
+  @@index([estadoActualizadoEn])
+  @@index([partido])
+  @@index([contactId])
+  @@index([propertyId])
+}
