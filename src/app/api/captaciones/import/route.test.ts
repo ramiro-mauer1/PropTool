@@ -39,8 +39,9 @@ vi.mock('@/lib/db', () => ({ prisma: buildFakePrisma() }));
 const { POST } = await import('./route');
 
 const TOKEN = 'token-de-prueba';
+// Invented listings in the pre-2026-10 format (none of the new optional fields).
 const muestra = JSON.parse(
-  readFileSync(fileURLToPath(new URL('../../../../../plinth_muestra_captaciones.json', import.meta.url)), 'utf8')
+  readFileSync(fileURLToPath(new URL('../../../../lib/captaciones/__fixtures__/muestra_formato_viejo.json', import.meta.url)), 'utf8')
 ) as { corrida: { id: string }; captaciones: Record<string, unknown>[] };
 
 function makeRequest(body: unknown, token: string | null = TOKEN) {
@@ -72,13 +73,13 @@ describe('POST /api/captaciones/import', () => {
     expect(res.status).toBe(401);
   });
 
-  it('acepta la muestra real', async () => {
+  it('acepta la muestra', async () => {
     const res = await POST(makeRequest(muestra));
     expect(res.status).toBe(200);
     const data = await res.json();
-    expect(data).toEqual({ recibidas: 14, nuevas: 14, actualizadas: 0, rechazadas: [] });
-    expect(rows).toHaveLength(14);
-    const primera = rows.find((r) => r.clave === 'zonaprop:58411807')!;
+    expect(data).toEqual({ recibidas: 3, nuevas: 3, actualizadas: 0, rechazadas: [] });
+    expect(rows).toHaveLength(3);
+    const primera = rows.find((r) => r.clave === 'zonaprop:10000001')!;
     expect(primera.m2Total).toBe(529);
     expect(primera.barrioPrivado).toBe(true);
     expect(primera.corridaId).toBe('2026-10-05');
@@ -88,13 +89,13 @@ describe('POST /api/captaciones/import', () => {
     await POST(makeRequest(muestra));
     const res = await POST(makeRequest(muestra));
     const data = await res.json();
-    expect(data).toEqual({ recibidas: 14, nuevas: 0, actualizadas: 14, rechazadas: [] });
-    expect(rows).toHaveLength(14);
+    expect(data).toEqual({ recibidas: 3, nuevas: 0, actualizadas: 3, rechazadas: [] });
+    expect(rows).toHaveLength(3);
   });
 
   it('no pisa lo que cargó el corredor, pero sí actualiza los datos del aviso', async () => {
     await POST(makeRequest(muestra));
-    const r = rows.find((x) => x.clave === 'zonaprop:58411807')!;
+    const r = rows.find((x) => x.clave === 'zonaprop:10000001')!;
     const compradoEn = new Date('2026-10-06T12:00:00Z');
     Object.assign(r, {
       estado: 'tasacion',
@@ -108,7 +109,7 @@ describe('POST /api/captaciones/import', () => {
     const segunda = {
       corrida: { id: '2026-10-12' },
       captaciones: muestra.captaciones.map((c) =>
-        c.clave === 'zonaprop:58411807' ? { ...c, precio: 280000, score: 70, telefono: '1100000000' } : c
+        c.clave === 'zonaprop:10000001' ? { ...c, precio: 280000, score: 70, telefono: '1100000000' } : c
       ),
     };
     await POST(makeRequest(segunda));
