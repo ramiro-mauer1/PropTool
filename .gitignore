@@ -44,6 +44,9 @@ public/models/*.onnx
 
 
 # local data samples & tooling
+# Owners' names and phones: real listing data and screenshots never go to git.
 plinth_muestra_captaciones.json
+captaciones_*.json
+capturas-captaciones/
 /.claude/
 /.impeccable/

@@ -29,6 +29,9 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
       diasPublicado: true,
       barrioPrivado: true,
       descripcion: true,
+      senalesFuertes: true,
+      rechazaInmobiliarias: true,
+      abiertoACorredores: true,
       anunciante: true,
     },
   });

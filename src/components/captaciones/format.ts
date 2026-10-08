@@ -35,6 +35,9 @@ export function pestaniaDe(estado: CaptacionEstadoValue): Pestania {
   return PESTANIAS.find((p) => p.estados.includes(estado))!.id;
 }
 
+/** Score cutoffs for the card's opportunity badge (inclusive lower bounds). */
+export const CORTES_PUNTAJE = { alta: 40, buena: 30 } as const;
+
 export function formatPrecio(precio: number | null, moneda: string | null): string | null {
   if (precio == null) return null;
   const m = (moneda ?? '').trim().toUpperCase();
@@ -88,4 +91,25 @@ export function prepararBorrador(borrador: string | null, agente: string | null)
   // useAuthUser falls back to the email when the profile has no name; never sign with that.
   const firma = agente && !agente.includes('@') ? agente.trim() : '';
   return borrador.replace(/\{nombre_broker\}/g, firma).replace(/\n+$/, '').trimEnd();
+}
+
+/** "8 de octubre" (adds the year only when it isn't the current one). */
+export function formatFechaCorta(iso: string, hoy: Date = new Date()): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString('es-AR', {
+    day: 'numeric',
+    month: 'long',
+    ...(d.getFullYear() !== hoy.getFullYear() ? { year: 'numeric' } : {}),
+    timeZone: 'America/Argentina/Buenos_Aires',
+  });
+}
+
+/** Persistent note shown once a Zonaprop phone purchase came back empty. */
+export function avisoCompraSinNumero(telefonoIntentadoEn: string): string {
+  return `Pediste el teléfono el ${formatFechaCorta(telefonoIntentadoEn)} y Zonaprop no lo tenía. Se cobró menos de USD 0,01.`;
+}
+
+/** The search job flags listings whose price looks mistyped on the portal. */
+export function precioARevisar(motivo: string): boolean {
+  return /precio mal cargado en el portal/i.test(motivo);
 }

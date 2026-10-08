@@ -1,4 +1,5 @@
 import type { MessageTone } from '@/lib/userPreferences';
+import { normalizarCita } from '@/lib/captaciones/motivo';
 import { elegirAngulos, nombreDelDueno, pideSinInmobiliarias, type Angulo, type AnguloId, type DatosAviso } from './angulos';
 
 /**
@@ -51,6 +52,7 @@ const FRASES_PROHIBIDAS: RegExp[] = [
   /no dude en/i,
   /oportunidad [uú]nica/i,
   /\burgente\b/i,
+  /(firm(ar|emos|e)|con|en|pedir(te|le)?|autorizaci[oó]n( de)?) (la |una )?exclusiv/i, // pedir exclusividad en el primer mensaje
   /https?:\/\//i, // sin links en el primer mensaje (parecen spam en WhatsApp)
   // Trabajo o credenciales que el agente todavía no tiene: si el dueño dice "sí", no hay nada para mandar.
   // (sin \b al final: en JS "é" no es carácter de palabra y \b falla después de una tilde)
@@ -61,15 +63,46 @@ export function contarPalabras(texto: string): number {
   return texto.trim().split(/\s+/).filter(Boolean).length;
 }
 
+export interface ReglasAviso {
+  /** Frases textuales del dueño: se pueden citar aunque digan "urgente" u "oportunidad". */
+  citas?: string[];
+  /** El dueño pidió no ser contactado por inmobiliarias: el mensaje tiene que reconocerlo. */
+  rechazaInmobiliarias?: boolean;
+}
+
+function sinCitas(t: string, citas: string[]) {
+  let out = t;
+  for (const c of citas) {
+    const cita = c.trim();
+    if (!cita) continue;
+    out = out.replace(new RegExp(cita.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ' ');
+  }
+  return out;
+}
+
+/** Si la IA copió una cita del dueño en mayúsculas, la deja como en la tarjeta ("Venta urgente"). */
+export function normalizarCitasEnTexto(texto: string, citas: string[]): string {
+  let out = texto;
+  for (const c of citas) {
+    const cita = c.trim();
+    const normal = normalizarCita(cita);
+    if (normal !== cita) out = out.split(cita).join(normal);
+  }
+  return out;
+}
+
 /** Devuelve el motivo del rechazo, o null si el mensaje cumple las reglas. */
-export function validarMensaje(texto: string, agente: Agente): string | null {
+export function validarMensaje(texto: string, agente: Agente, reglas: ReglasAviso = {}): string | null {
   const t = texto.trim();
   const palabras = contarPalabras(t);
   if (palabras < 20) return 'demasiado corto';
   if (palabras > 85) return 'demasiado largo';
   const preguntas = (t.match(/\?/g) ?? []).length;
   if (preguntas !== 1) return 'debe tener exactamente una pregunta';
-  for (const re of FRASES_PROHIBIDAS) if (re.test(t)) return `frase prohibida: ${re.source}`;
+  // Lo citado del aviso y el "sin exclusividad" no son frases del agente que haya que vetar.
+  const propio = sinCitas(t, reglas.citas ?? []).replace(/\bsin (pedir(te|le) )?(la )?exclusividad/gi, ' ');
+  for (const re of FRASES_PROHIBIDAS) if (re.test(propio)) return `frase prohibida: ${re.source}`;
+  if (reglas.rechazaInmobiliarias && !/inmobiliaria/i.test(t)) return 'no reconoce que el dueño pidió no contactar inmobiliarias';
   if (agente.tono === 'formal' && /\b(vos|te|tu|tus|ti|tenés|querés|podés|sabés|contame|mirá)(?![a-zñáéíóú])/i.test(t)) return 'tono: vosea siendo formal';
   if (agente.tono === 'cercano' && /\busted\b/i.test(t)) return 'tono: usa usted siendo cercano';
   return null;
@@ -101,10 +134,12 @@ function firma(agente: Agente, formal: boolean) {
 export function plantilla(angulo: Angulo, d: DatosAviso, dueno: string | null, agente: Agente): string {
   const formal = agente.tono === 'formal';
   const tipo = d.tipo.toLowerCase();
+  const rechaza = pideSinInmobiliarias(d.descripcion, d.rechazaInmobiliarias);
   const partes = formal
     ? [
         dueno ? `Buenas tardes, ${dueno}.` : 'Buenas tardes.',
         `Vi el aviso de su ${tipo} en ${d.localidad}.`,
+        rechaza ? 'Sé que pidió no recibir mensajes de inmobiliarias, así que voy a ser breve y sin pedirle exclusividad.' : '',
         angulo.frase,
         `Puedo enviarle sin cargo ${angulo.oferta}.`,
         '¿Le sirve que se lo envíe?',
@@ -112,16 +147,18 @@ export function plantilla(angulo: Angulo, d: DatosAviso, dueno: string | null, a
     : [
         dueno ? `Hola ${dueno}.` : 'Hola.',
         `Vi el aviso de tu ${tipo} en ${d.localidad}.`,
+        rechaza ? 'Sé que pediste no recibir mensajes de inmobiliarias, así que voy a ser breve y sin pedirte exclusividad.' : '',
         angulo.frase,
         `Te puedo pasar sin cargo ${angulo.oferta}.`,
         '¿Te sirve que te lo mande?',
       ];
-  return `${partes.join(' ')}${firma(agente, formal)}`.replace(/\s+/g, ' ').trim();
+  return `${partes.filter(Boolean).join(' ')}${firma(agente, formal)}`.replace(/\s+/g, ' ').trim();
 }
 
 // ── IA ────────────────────────────────────────────────────────────────────────
 
 function construirPrompt(d: DatosAviso, angulos: Angulo[], dueno: string | null, agente: Agente): string {
+  const rechaza = pideSinInmobiliarias(d.descripcion, d.rechazaInmobiliarias);
   const trato =
     agente.tono === 'formal'
       ? 'Tratá al dueño de USTED (español rioplatense formal, cordial). Saludo tipo "Buenas tardes".'
@@ -171,6 +208,9 @@ REGLAS (obligatorias; un mensaje que las rompa se descarta)
 9. Ortografía impecable con todas las tildes (diagnóstico, garantías, por qué).
 10. NO empieces presentándote ("Soy corredor..."). NO inventes compradores, cifras, ventas ni urgencias que no estén en los datos. NO uses: "tasación gratuita", "compradores calificados", "oportunidad única", "no dude en", "estimado".
 11. Cada variante debe abrir distinto y sonar escrita por una persona, no por una plantilla.
+12. Si el HECHO cita una frase textual del aviso, citala entre comillas tal cual aparece en el HECHO, sin pasarla a mayúsculas. Es lo único que puede decir "urgente" u "oportunidad".
+13. No pidas exclusividad ni hables de firmar nada.${rechaza ? `
+14. IMPORTANTE: el dueño pidió en el aviso no ser contactado por inmobiliarias. Cada variante tiene que reconocerlo con respeto y sin vueltas (ej. ${formal ? '"sé que pidió no recibir mensajes de inmobiliarias, así que voy a ser breve"' : '"sé que pediste no recibir mensajes de inmobiliarias, así que voy a ser breve"'}), ofrecer algo útil sin compromiso y no pedir exclusividad. No lo ocultes ni lo ignores.` : ''}
 
 Respondé SOLO con JSON: {"variantes":[{"angulo":"<id>","mensaje":"<texto>"}]}`;
 }
@@ -213,7 +253,8 @@ async function llamarGemini(prompt: string): Promise<{ angulo: string; mensaje: 
 export async function redactarMensajes(d: DatosAviso, anunciante: string | null, agente: Agente): Promise<ResultadoRedaccion> {
   const angulos = elegirAngulos(d).slice(0, MAX_VARIANTES);
   const dueno = nombreDelDueno(anunciante);
-  const sinInmobiliarias = pideSinInmobiliarias(d.descripcion);
+  const sinInmobiliarias = pideSinInmobiliarias(d.descripcion, d.rechazaInmobiliarias);
+  const reglas: ReglasAviso = { citas: [...(d.senalesFuertes ?? []), ...d.senales], rechazaInmobiliarias: sinInmobiliarias };
 
   const prompt = construirPrompt(d, angulos, dueno, agente);
   // El modelo liviano a veces devuelve JSON roto: un reintento alcanza casi siempre.
@@ -223,8 +264,8 @@ export async function redactarMensajes(d: DatosAviso, anunciante: string | null,
 
   for (const angulo of angulos) {
     const crudo = deIa.find((v) => v.angulo === angulo.id)?.mensaje;
-    const candidato = crudo ? asegurarFirma(crudo, agente) : undefined;
-    const motivoRechazo = candidato ? validarMensaje(candidato, agente) : 'sin respuesta de la IA';
+    const candidato = crudo ? asegurarFirma(normalizarCitasEnTexto(crudo, reglas.citas ?? []), agente) : undefined;
+    const motivoRechazo = candidato ? validarMensaje(candidato, agente, reglas) : 'sin respuesta de la IA';
     const apertura = candidato ? normalizarApertura(candidato) : '';
     if (candidato && !motivoRechazo && !aperturas.has(apertura)) {
       aperturas.add(apertura);

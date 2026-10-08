@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
@@ -121,6 +121,65 @@ describe('POST /api/captaciones/import', () => {
     expect(r.precio).toBe(280000);
     expect(r.score).toBe(70);
     expect(r.corridaId).toBe('2026-10-12');
+  });
+
+  it('guarda los campos nuevos del buscador revisado', async () => {
+    const con = {
+      ...muestra.captaciones[0],
+      senales_fuertes: ['VENTA URGENTE'],
+      rechaza_inmobiliarias: true,
+      abierto_a_corredores: false,
+      republicado: true,
+      otros_portales: ['mercadolibre'],
+      analizado_por: 'agente',
+    };
+    const res = await POST(makeRequest({ corrida: { id: 'x' }, captaciones: [con] }));
+    expect((await res.json()).rechazadas).toEqual([]);
+    expect(rows[0]).toMatchObject({
+      senalesFuertes: ['VENTA URGENTE'],
+      rechazaInmobiliarias: true,
+      abiertoACorredores: false,
+      republicado: true,
+      otrosPortales: ['mercadolibre'],
+      analizadoPor: 'agente',
+    });
+  });
+
+  it('un JSON viejo sin los campos nuevos sigue entrando, con valores vacíos', async () => {
+    expect(muestra.captaciones[0]).not.toHaveProperty('senales_fuertes');
+    await POST(makeRequest(muestra));
+    expect(rows[0]).toMatchObject({
+      senalesFuertes: [],
+      rechazaInmobiliarias: null,
+      abiertoACorredores: null,
+      republicado: null,
+      otrosPortales: [],
+      analizadoPor: null,
+    });
+  });
+
+  // Real owners' data: kept out of git, so this only runs where the file exists.
+  const revisadaPath = fileURLToPath(new URL('../../../../../captaciones_revisadas_2026-10-05.json', import.meta.url));
+  it.skipIf(!existsSync(revisadaPath))('acepta la lista revisada completa sin rechazos', async () => {
+    const revisada = JSON.parse(readFileSync(revisadaPath, 'utf8'));
+    const data = await (await POST(makeRequest(revisada))).json();
+    expect(data).toMatchObject({ recibidas: 95, nuevas: 95, rechazadas: [] });
+  });
+
+  it('rechaza un campo nuevo con tipo incorrecto', async () => {
+    const res = await POST(
+      makeRequest({
+        corrida: { id: 'x' },
+        captaciones: [
+          { ...muestra.captaciones[0], senales_fuertes: 'urgente' },
+          { ...muestra.captaciones[1], rechaza_inmobiliarias: 'si' },
+        ],
+      })
+    );
+    expect((await res.json()).rechazadas).toEqual([
+      { clave: muestra.captaciones[0].clave, motivo: 'senales_fuertes debe ser un array de textos.' },
+      { clave: muestra.captaciones[1].clave, motivo: 'rechaza_inmobiliarias debe ser booleano o null.' },
+    ]);
   });
 
   it('rechaza con 400 una estructura inválida', async () => {

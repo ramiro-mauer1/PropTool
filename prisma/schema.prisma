@@ -185,6 +185,12 @@ model Captacion {
   visitas               Int?
   fechaPublicacion      DateTime? @db.Date
   descripcion           String?
+  senalesFuertes        String[]  @default([]) // literal phrases from the listing with real urgency
+  rechazaInmobiliarias  Boolean?
+  abiertoACorredores    Boolean?
+  republicado           Boolean?
+  otrosPortales         String[]  @default([])
+  analizadoPor          String? // "agente" | "heuristica"
 
   // Seguimiento
   estado                   CaptacionEstado @default(nuevo)
@@ -193,6 +199,13 @@ model Captacion {
   telefonoAdquiridoEn      DateTime? // phone bought via Apify; never buy again
   telefonoIntentadoEn      DateTime? // bought, but Zonaprop had no phone for the listing
   telefonoCompraIniciadaEn DateTime? // in-flight purchase lock (stale after a few minutes)
+  // Medición: qué se mandó y qué pasó después. respondioEn/captadoEn se
+  // completan una sola vez y nunca se borran, aunque el estado cambie.
+  anguloEnviado            String?
+  mensajeEnviado           String?
+  enviadoEn                DateTime?
+  respondioEn              DateTime?
+  captadoEn                DateTime?
   primeraVezVista          DateTime        @default(now())
   ultimaVezVista           DateTime        @default(now())
   corridaId                String
@@ -208,4 +221,5 @@ model Captacion {
   @@index([partido])
   @@index([contactId])
   @@index([propertyId])
+  @@index([anguloEnviado])
 }

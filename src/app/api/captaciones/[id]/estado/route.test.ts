@@ -14,6 +14,8 @@ interface Row {
   moneda: string | null;
   contactId: string | null;
   propertyId: string | null;
+  respondioEn?: Date | null;
+  captadoEn?: Date | null;
 }
 
 let rows: Row[];
@@ -130,6 +132,38 @@ describe('PATCH /api/captaciones/[id]/estado', () => {
     await patch({ estado: 'descartado', motivo: 'Ya vendió' });
     expect(rows[0].estado).toBe('descartado');
     expect(rows[0].notas).toBe('Llamar a la tarde\nDescartada: Ya vendió');
+  });
+
+  it('respondioEn y captadoEn se completan una sola vez y sobreviven a cambios posteriores', async () => {
+    rows[0].estado = 'contactado';
+    await patch({ estado: 'contactado' });
+    expect(rows[0].respondioEn ?? null).toBeNull();
+
+    await patch({ estado: 'respondio' });
+    const respondio = rows[0].respondioEn!;
+    expect(respondio).toBeInstanceOf(Date);
+    expect(rows[0].captadoEn ?? null).toBeNull();
+
+    await patch({ estado: 'tasacion' });
+    expect(rows[0].respondioEn).toBe(respondio);
+
+    await patch({ estado: 'captado' });
+    const captado = rows[0].captadoEn!;
+    expect(captado).toBeInstanceOf(Date);
+    expect(rows[0].respondioEn).toBe(respondio);
+
+    await patch({ estado: 'descartado', motivo: 'Se arrepintió' });
+    await patch({ estado: 'nuevo' });
+    await patch({ estado: 'captado' });
+    expect(rows[0].respondioEn).toBe(respondio);
+    expect(rows[0].captadoEn).toBe(captado);
+  });
+
+  it('pasar directo a captado también marca respondioEn', async () => {
+    rows[0].estado = 'nuevo';
+    await patch({ estado: 'captado' });
+    expect(rows[0].respondioEn).toBeInstanceOf(Date);
+    expect(rows[0].captadoEn).toBeInstanceOf(Date);
   });
 
   it('rechaza un estado inválido', async () => {

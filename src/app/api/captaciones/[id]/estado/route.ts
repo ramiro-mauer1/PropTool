@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const MAX_MOTIVO = 280;
+const ESTADOS_RESPONDIO: string[] = ['respondio', 'tasacion', 'captado'];
 
 // PATCH { estado, motivo? }. Any direction is allowed (advance, step back,
 // reopen) so a mis-tap is always recoverable. Marking "captado" hands the
@@ -40,6 +41,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (!captacion) return NextResponse.json({ error: 'Captación no encontrada.' }, { status: 404 });
 
   const now = new Date();
+  // Hitos para las métricas: se completan la primera vez y nunca se borran,
+  // aunque después la captación retroceda o se descarte.
+  const hitos = {
+    ...(!captacion.respondioEn && ESTADOS_RESPONDIO.includes(estado) ? { respondioEn: now } : {}),
+    ...(!captacion.captadoEn && estado === 'captado' ? { captadoEn: now } : {}),
+  };
+
   const notas =
     estado === 'descartado' && motivo
       ? [captacion.notas, `Descartada: ${motivo}`].filter(Boolean).join('\n')
@@ -48,7 +56,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (estado !== 'captado') {
     const updated = await prisma.captacion.update({
       where: { id: captacion.id },
-      data: { estado, estadoActualizadoEn: now, ...(notas !== undefined ? { notas } : {}) },
+      data: { estado, estadoActualizadoEn: now, ...hitos, ...(notas !== undefined ? { notas } : {}) },
     });
     return NextResponse.json({ captacion: updated });
   }
@@ -102,7 +110,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
       return tx.captacion.update({
         where: { id: locked.id },
-        data: { estado, estadoActualizadoEn: now, contactId, propertyId },
+        data: {
+          estado,
+          estadoActualizadoEn: now,
+          contactId,
+          propertyId,
+          ...(locked.respondioEn ? {} : { respondioEn: now }),
+          ...(locked.captadoEn ? {} : { captadoEn: now }),
+        },
       });
     });
     return NextResponse.json({ captacion: updated });

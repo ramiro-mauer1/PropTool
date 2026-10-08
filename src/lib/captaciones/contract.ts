@@ -37,6 +37,13 @@ export interface CaptacionInput {
   visitas: number | null;
   fecha_publicacion: string | null;
   descripcion: string | null;
+  // Added 2026-10 by the revised search job. Optional: older payloads omit them.
+  senales_fuertes: string[];
+  rechaza_inmobiliarias: boolean | null;
+  abierto_a_corredores: boolean | null;
+  republicado: boolean | null;
+  otros_portales: string[];
+  analizado_por: string | null;
 }
 
 export interface ImportBody {
@@ -78,7 +85,9 @@ const NULLABLE_STRINGS = [
   'borrador_mensaje',
   'fecha_publicacion',
   'descripcion',
+  'analizado_por',
 ] as const;
+const NULLABLE_BOOLEANS = ['rechaza_inmobiliarias', 'abierto_a_corredores', 'republicado'] as const;
 const NULLABLE_NUMBERS = ['precio', 'm2_cubiertos', 'm2_total', 'ambientes', 'lat', 'lon'] as const;
 const NULLABLE_INTS = ['dias_publicado', 'visitas'] as const;
 
@@ -119,7 +128,10 @@ export function validateCaptacion(item: unknown): Result<CaptacionInput> {
   if (item.barrio_privado != null && typeof item.barrio_privado !== 'boolean') {
     return { ok: false, motivo: 'barrio_privado debe ser booleano.' };
   }
-  for (const k of ['senales', 'problemas_aviso'] as const) {
+  for (const k of NULLABLE_BOOLEANS) {
+    if (item[k] != null && typeof item[k] !== 'boolean') return { ok: false, motivo: `${k} debe ser booleano o null.` };
+  }
+  for (const k of ['senales', 'problemas_aviso', 'senales_fuertes', 'otros_portales'] as const) {
     const v = item[k];
     if (v != null && (!Array.isArray(v) || v.some((s) => typeof s !== 'string'))) {
       return { ok: false, motivo: `${k} debe ser un array de textos.` };
@@ -164,6 +176,12 @@ export function validateCaptacion(item: unknown): Result<CaptacionInput> {
       visitas: num('visitas'),
       fecha_publicacion: str('fecha_publicacion'),
       descripcion: str('descripcion'),
+      senales_fuertes: (item.senales_fuertes as string[] | null | undefined) ?? [],
+      rechaza_inmobiliarias: (item.rechaza_inmobiliarias as boolean | null | undefined) ?? null,
+      abierto_a_corredores: (item.abierto_a_corredores as boolean | null | undefined) ?? null,
+      republicado: (item.republicado as boolean | null | undefined) ?? null,
+      otros_portales: (item.otros_portales as string[] | null | undefined) ?? [],
+      analizado_por: str('analizado_por'),
     },
   };
 }
@@ -202,6 +220,12 @@ export function toListingData(c: CaptacionInput) {
     visitas: c.visitas,
     fechaPublicacion: c.fecha_publicacion ? new Date(c.fecha_publicacion) : null,
     descripcion: c.descripcion,
+    senalesFuertes: c.senales_fuertes,
+    rechazaInmobiliarias: c.rechaza_inmobiliarias,
+    abiertoACorredores: c.abierto_a_corredores,
+    republicado: c.republicado,
+    otrosPortales: c.otros_portales,
+    analizadoPor: c.analizado_por,
   } satisfies Prisma.CaptacionUpdateInput;
 }
 

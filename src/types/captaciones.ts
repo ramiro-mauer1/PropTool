@@ -43,6 +43,11 @@ export interface CaptacionDTO {
   diasPublicado: number | null;
   visitas: number | null;
   fechaPublicacion: string | null;
+  senalesFuertes: string[];
+  rechazaInmobiliarias: boolean | null;
+  abiertoACorredores: boolean | null;
+  republicado: boolean | null;
+  otrosPortales: string[];
   estado: CaptacionEstadoValue;
   notas: string | null;
   estadoActualizadoEn: string;

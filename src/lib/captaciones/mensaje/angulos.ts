@@ -1,4 +1,4 @@
-import { parseMotivo } from '@/lib/captaciones/motivo';
+import { normalizarCita, parseMotivo } from '@/lib/captaciones/motivo';
 
 /**
  * Elige con qué "ángulo" abrir la conversación con el dueño, a partir de los
@@ -8,9 +8,14 @@ import { parseMotivo } from '@/lib/captaciones/motivo';
  *
  * Determinístico y sin IA: la IA solo redacta el ángulo elegido acá, así no
  * puede inventar hechos que no estén en los datos.
+ *
+ * El precio NO es un ángulo de primer mensaje: el dato compara contra precios
+ * pedidos, no de cierre, y decirle a un dueño que está caro lo pone a la
+ * defensiva. Queda en `anguloPrecioSeguimiento` para un mensaje posterior.
  */
 
-export type AnguloId = 'precio' | 'visibilidad' | 'presentacion' | 'senal' | 'recien' | 'alquiler' | 'mercado';
+export const ANGULO_IDS = ['corredores', 'senal', 'visibilidad', 'presentacion', 'recien', 'alquiler', 'mercado', 'precio'] as const;
+export type AnguloId = (typeof ANGULO_IDS)[number];
 
 export interface Angulo {
   id: AnguloId;
@@ -34,14 +39,23 @@ export interface DatosAviso {
   diasPublicado: number | null;
   barrioPrivado: boolean;
   descripcion: string | null;
+  /** Frases textuales del aviso con apuro real; se pueden citar tal cual. */
+  senalesFuertes?: string[];
+  rechazaInmobiliarias?: boolean | null;
+  abiertoACorredores?: boolean | null;
 }
 
 const NO_INMOBILIARIAS =
   /abstenerse\s+(inmobiliarias|agencias|corredores)|sin\s+inmobiliarias|no\s+(atiendo|acepto|trabajo con)\s+inmobiliarias|inmobiliarias\s+abstenerse|solo\s+particulares/i;
 
 /** El dueño pidió explícitamente no ser contactado por inmobiliarias. */
-export function pideSinInmobiliarias(descripcion: string | null): boolean {
-  return !!descripcion && NO_INMOBILIARIAS.test(descripcion);
+export function pideSinInmobiliarias(descripcion: string | null, rechazaInmobiliarias?: boolean | null): boolean {
+  return rechazaInmobiliarias === true || (!!descripcion && NO_INMOBILIARIAS.test(descripcion));
+}
+
+/** El buscador marca así los avisos viejos que probablemente ya se vendieron o alquilaron. */
+function puedeEstarDesactualizado(motivo: string) {
+  return /puede estar desactualizado/i.test(motivo);
 }
 
 function esAlquiler(operacion: string) {
@@ -87,35 +101,42 @@ export function elegirAngulos(d: DatosAviso): Angulo[] {
   const lugar = zona(d.localidad);
   const alquiler = esAlquiler(d.operacion);
 
-  // 1. Señales del propio dueño: es lo que más predispone a responder.
-  const senal = d.senales.find((s) => /oferta|permuta|parte de pago|urgente|financ|apto cr[eé]dito|due[ñn]o vende/i.test(s));
-  if (senal) {
+  // 1. Acepta corredores: la puerta ya está abierta, se ofrece trabajar en conjunto.
+  if (d.abiertoACorredores) {
     out.push({
-      id: 'senal',
-      etiqueta: 'Lo que pide el dueño',
-      hecho: `En el aviso dice: "${senal}".`,
-      frase: `Me llamó la atención que en el aviso dice "${senal.toLowerCase()}".`,
-      oferta: alquiler
-        ? 'el perfil de interesados que suele aceptar esa condición en la zona'
-        : 'qué perfil de comprador está buscando justo eso en la zona y cómo se viene moviendo',
+      id: 'corredores',
+      etiqueta: 'Trabajo en conjunto',
+      hecho: 'El aviso dice que acepta propuestas de corredores, sin exclusividad.',
+      frase: 'Vi que en el aviso aceptan propuestas de corredores.',
+      oferta: 'una propuesta para trabajar la propiedad en conjunto, sin exclusividad',
     });
   }
 
-  // 2. Precio por encima de comparables: la dificultad nº1 de quien vende solo.
-  if (m.precioPct !== null && m.precioPct >= 15 && !alquiler) {
+  // 2. Señales del propio dueño: es lo que más predispone a responder. Las
+  // señales fuertes son frases textuales del aviso, así que se citan tal cual.
+  const fuerte = d.senalesFuertes?.find((s) => s.trim());
+  const senal = fuerte ?? d.senales.find((s) => /oferta|permuta|parte de pago|urgente|financ|apto cr[eé]dito|due[ñn]o vende/i.test(s));
+  if (senal) {
+    const cita = normalizarCita(senal);
     out.push({
-      id: 'precio',
-      etiqueta: 'Dato de precio',
-      hecho: `Su precio por m² está aproximadamente ${Math.round(m.precioPct)}% por encima de avisos similares de ${m.precioReferencia ?? 'la zona'} (${lugar}).`,
-      frase: `Comparando con avisos parecidos de la zona, el precio por m² quedó cerca de un ${Math.round(m.precioPct)}% arriba.`,
-      oferta: 'un comparativo de lo que se publicó y vendió parecido en la zona',
+      id: 'senal',
+      etiqueta: 'Lo que pide el dueño',
+      hecho: `En el aviso dice textualmente: "${cita}".`,
+      frase: `Me llamó la atención que en el aviso dice "${cita}".`,
+      oferta: alquiler
+        ? 'el perfil de interesados que suele aceptar esa condición en la zona'
+        : fuerte
+        ? 'un resumen de qué se publicó parecido en la zona y a qué valores, para decidir rápido y con datos'
+        : 'qué perfil de comprador está buscando justo eso en la zona y cómo se viene moviendo',
     });
   }
 
   // 3. Mucho tiempo publicado / pocas visitas: el aviso no está rindiendo.
   const dias = d.diasPublicado;
   const pocasVisitas = m.visitasDia !== null && m.visitasDia < 2;
-  if ((dias !== null && dias >= 45) || pocasVisitas || m.pagaDestacado) {
+  // Un aviso posiblemente desactualizado ya se habrá vendido o alquilado: no
+  // tiene sentido hablarle de la visibilidad.
+  if (!puedeEstarDesactualizado(d.motivo) && ((dias !== null && dias >= 45) || pocasVisitas || m.pagaDestacado)) {
     const partes: string[] = [];
     if (dias !== null && dias >= 45) partes.push(`lleva ${dias} días publicado`);
     if (pocasVisitas) partes.push(`recibe pocas visitas (${m.visitasDia} por día)`);
@@ -180,6 +201,22 @@ export function elegirAngulos(d: DatosAviso): Angulo[] {
   });
 
   return out;
+}
+
+/**
+ * Ángulo de precio, solo para un seguimiento (nunca para el primer mensaje).
+ * Null si no hay dato o si la diferencia es chica. No aplica a alquileres.
+ */
+export function anguloPrecioSeguimiento(d: DatosAviso): Angulo | null {
+  const m = leerMetricas(d.motivo);
+  if (m.precioPct === null || m.precioPct < 15 || esAlquiler(d.operacion)) return null;
+  return {
+    id: 'precio',
+    etiqueta: 'Dato de precio',
+    hecho: `Su precio por m² está aproximadamente ${Math.round(m.precioPct)}% por encima de avisos similares de ${m.precioReferencia ?? 'la zona'} (${zona(d.localidad)}).`,
+    frase: `Comparando con avisos parecidos de la zona, el precio por m² quedó cerca de un ${Math.round(m.precioPct)}% arriba.`,
+    oferta: 'un comparativo de lo que se publicó parecido en la zona',
+  };
 }
 
 /** Primer nombre del anunciante si parece una persona; si no, null (saludo sin nombre). */

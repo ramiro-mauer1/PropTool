@@ -24,17 +24,20 @@ import {
   Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { parseMotivo } from '@/lib/captaciones/motivo';
+import { normalizarCita, parseMotivo, quitarCitaDelDesglose } from '@/lib/captaciones/motivo';
 import { toWhatsappNumber } from '@/lib/captaciones/phone';
 import { CAPTACION_ESTADOS, type CaptacionDTO, type CaptacionEstadoValue } from '@/types/captaciones';
 import type { CompraTelefonoResultado } from '@/hooks/useCaptaciones';
 import type { ResultadoRedaccion } from '@/lib/captaciones/mensaje/redactar';
 import {
+  CORTES_PUNTAJE,
   ETAPA_LABEL,
   PORTAL_LABEL,
   SIGUIENTE,
+  avisoCompraSinNumero,
   capitalizar,
   formatPrecio,
+  precioARevisar,
   prepararBorrador,
   resumenAmbientes,
   urlAvisoSegura,
@@ -49,6 +52,8 @@ interface CaptacionCardProps {
   comprando: boolean;
   onCambiarEstado: (estado: CaptacionEstadoValue, motivo?: string) => void;
   onAdquirirTelefono: () => Promise<CompraTelefonoResultado>;
+  /** Abre "Contactar" desde el inicio (tests y enlaces directos). */
+  contactoAbiertoInicial?: boolean;
 }
 
 const BTN =
@@ -56,14 +61,19 @@ const BTN =
 const BTN_GHOST = `${BTN} border border-border bg-surface-raised text-foreground hover:border-border-hover`;
 const BTN_OUTLINE = `${BTN} min-h-[40px] border border-border text-foreground hover:border-border-hover`;
 const BTN_PRIMARY = `${BTN} bg-accent text-[#08090a] font-semibold hover:bg-accent-hover`;
+const ETIQUETA = 'inline-flex items-center rounded-full border border-border px-2 py-0.5 text-[11px] leading-tight text-secondary';
+
 const MENU_ITEM =
   'w-full flex items-center justify-between gap-2 px-3 min-h-[44px] md:min-h-[40px] rounded-subtle text-sm text-foreground text-left hover:bg-surface-raised focus:bg-surface-raised focus:outline-none disabled:text-muted disabled:hover:bg-transparent';
 
 // The badge and chips sit on the photo, so they keep dark fills in both themes.
+// Every level carries a 1px border (transparent on the solid one) so they all
+// measure the same.
 function nivel(score: number) {
-  if (score >= 55) return { label: 'Alta oportunidad', cls: 'bg-[#d4ff32] text-[#08090a]' };
-  if (score >= 40) return { label: 'Oportunidad media', cls: 'bg-[#08090a]/80 text-[#d4ff32] ring-1 ring-[#d4ff32]/40 backdrop-blur-sm' };
-  return { label: 'Oportunidad baja', cls: 'bg-[#08090a]/80 text-white/85 ring-1 ring-white/15 backdrop-blur-sm' };
+  if (score >= CORTES_PUNTAJE.alta) return { label: 'Alta oportunidad', cls: 'border-transparent bg-[#d4ff32] text-[#08090a]' };
+  if (score >= CORTES_PUNTAJE.buena)
+    return { label: 'Buena oportunidad', cls: 'border-[#d4ff32] bg-[rgba(9,9,11,0.75)] text-[#d4ff32] backdrop-blur-sm' };
+  return { label: 'Oportunidad baja', cls: 'border-white/15 bg-[#08090a]/80 text-white/85 backdrop-blur-sm' };
 }
 
 function Foto({ url, alt, score, barrioPrivado }: { url: string | null; alt: string; score: number; barrioPrivado: boolean }) {
@@ -89,7 +99,7 @@ function Foto({ url, alt, score, barrioPrivado }: { url: string | null; alt: str
         </span>
       )}
 
-      <div className={cn('absolute left-3.5 bottom-3.5 flex items-center gap-2.5 rounded-card py-1.5 pl-2.5 pr-3 shadow-[0_6px_20px_rgba(0,0,0,0.35)]', n.cls)}>
+      <div className={cn('absolute left-3.5 bottom-3.5 flex items-center gap-2.5 rounded-card border py-1.5 pl-2.5 pr-3 shadow-[0_6px_20px_rgba(0,0,0,0.35)]', n.cls)}>
         <span className="text-[28px] leading-none font-bold tracking-tight tabular-nums">{score}</span>
         <span className="flex flex-col text-2xs leading-tight font-semibold uppercase tracking-[0.04em]">
           puntos
@@ -153,7 +163,14 @@ function Acordeon({
   );
 }
 
-export function CaptacionCard({ captacion: c, agentName, comprando, onCambiarEstado, onAdquirirTelefono }: CaptacionCardProps) {
+export function CaptacionCard({
+  captacion: c,
+  agentName,
+  comprando,
+  onCambiarEstado,
+  onAdquirirTelefono,
+  contactoAbiertoInicial = false,
+}: CaptacionCardProps) {
   const [borrador, setBorrador] = useState('');
   const [copiado, setCopiado] = useState(false);
   // Variantes redactadas a pedido (una por ángulo). Se piden al abrir "Contactar".
@@ -165,7 +182,7 @@ export function CaptacionCard({ captacion: c, agentName, comprando, onCambiarEst
   const [panel, setPanel] = useState<'none' | 'descartar' | 'comprar'>('none');
   const [menu, setMenu] = useState<'closed' | 'main' | 'etapas'>('closed');
   const [puntajeOpen, setPuntajeOpen] = useState(false);
-  const [contactoOpen, setContactoOpen] = useState(false);
+  const [contactoOpen, setContactoOpen] = useState(contactoAbiertoInicial);
   const [motivoDescarte, setMotivoDescarte] = useState('');
   const [compraMsg, setCompraMsg] = useState<string | null>(null);
   const uid = useId();
@@ -197,7 +214,10 @@ export function CaptacionCard({ captacion: c, agentName, comprando, onCambiarEst
     menuListRef.current?.querySelector<HTMLElement>('[role^="menuitem"]:not([disabled])')?.focus();
   }, [menu]);
 
-  const motivos = parseMotivo(c.motivo)
+  const senalFuerte = c.senalesFuertes.find((s) => s.trim())?.trim() ?? null;
+  // La cita de arriba reemplaza a su fila en el desglose (y se lleva sus puntos).
+  const desglose = quitarCitaDelDesglose(parseMotivo(c.motivo), senalFuerte);
+  const motivos = desglose.items
     .map((m, i) => ({ ...m, i }))
     .sort((a, b) => (b.puntos ?? -Infinity) - (a.puntos ?? -Infinity) || a.i - b.i);
   const precio = formatPrecio(c.precio, c.moneda);
@@ -206,6 +226,9 @@ export function CaptacionCard({ captacion: c, agentName, comprando, onCambiarEst
   const avisoUrl = urlAvisoSegura(c.url);
   const portal = PORTAL_LABEL[c.portal] ?? capitalizar(c.portal);
   const puedeComprar = c.portal === 'zonaprop' && !c.telefono && !c.telefonoIntentadoEn;
+  // Ya se pagó la consulta y Zonaprop no tenía número: queda a la vista, con la alternativa.
+  const sinNumero = !!c.telefonoIntentadoEn && !c.telefono;
+  const revisarPrecio = precioARevisar(c.motivo);
   const siguiente = SIGUIENTE[c.estado];
   const titulo = `${capitalizar(c.tipo)} en ${c.operacion}`;
   const dueno = c.anunciante?.trim() || null;
@@ -252,9 +275,22 @@ export function CaptacionCard({ captacion: c, agentName, comprando, onCambiarEst
     setBorrador(redaccion.variantes[i].mensaje);
   };
 
+  // Registra qué se mandó, para medir qué ángulo responde mejor. No bloquea al
+  // corredor: si falla, el mensaje igual sale.
+  const registrarEnvio = () => {
+    const angulo = redaccion?.variantes[varianteActiva]?.angulo ?? 'borrador';
+    void fetch(`/api/captaciones/${c.id}/envio`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ angulo, mensaje: borrador }),
+      keepalive: true,
+    }).catch(() => {});
+  };
+
   const copiar = async () => {
     try {
       await navigator.clipboard.writeText(borrador);
+      registrarEnvio();
       setCopiado(true);
       setTimeout(() => setCopiado(false), 1800);
     } catch {
@@ -285,8 +321,8 @@ export function CaptacionCard({ captacion: c, agentName, comprando, onCambiarEst
     setPanel('none');
     setCompraMsg(null);
     const r = await onAdquirirTelefono();
+    // Sin número no hace falta mensaje: la tarjeta ya muestra el aviso fijo.
     if (!r.ok) setCompraMsg(r.error);
-    else if (!r.telefono) setCompraMsg(r.motivo);
   };
 
   const onMenuKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -325,7 +361,7 @@ export function CaptacionCard({ captacion: c, agentName, comprando, onCambiarEst
     </button>
   ) : null;
 
-  const whatsapp = waNumero ? (
+  const whatsapp = sinNumero ? null : waNumero ? (
     <a href={`https://wa.me/${waNumero}`} target="_blank" rel="noopener noreferrer" className={BTN_GHOST}>
       <MessageCircle className="w-4 h-4" />
       WhatsApp
@@ -369,14 +405,25 @@ export function CaptacionCard({ captacion: c, agentName, comprando, onCambiarEst
             </>
           )}
         </p>
-        <p className="text-2xl leading-tight font-bold tracking-tight text-foreground tabular-nums">
+        <p className="flex items-center gap-2 text-2xl leading-tight font-bold tracking-tight text-foreground tabular-nums">
           {precio ?? <span className="text-secondary font-normal text-base">Precio a consultar</span>}
+          {revisarPrecio && (
+            <span role="img" aria-label="Precio posiblemente mal cargado en el portal" title="Precio posiblemente mal cargado en el portal: revisalo en el aviso">
+              <TriangleAlert className="w-[18px] h-[18px] text-secondary" aria-hidden />
+            </span>
+          )}
         </p>
         <p className="text-sm leading-snug text-foreground">
           {c.localidad}
           {c.localidad !== c.partido && <span className="text-secondary">, {c.partido}</span>}
         </p>
         {ambientes.length > 0 && <p className="text-[13px] text-secondary tabular-nums">{ambientes.join(' · ')}</p>}
+        {(c.rechazaInmobiliarias || c.abiertoACorredores) && (
+          <p className="flex flex-wrap gap-1.5 pt-1">
+            {c.rechazaInmobiliarias && <span className={ETIQUETA}>Pidió no contactar inmobiliarias</span>}
+            {c.abiertoACorredores && <span className={ETIQUETA}>Acepta corredores</span>}
+          </p>
+        )}
       </div>
 
       {/* ── Acciones principales ──────────────────────────────────────── */}
@@ -540,6 +587,16 @@ export function CaptacionCard({ captacion: c, agentName, comprando, onCambiarEst
         icon={<ChartNoAxesColumn className="w-[18px] h-[18px]" />}
         title={`Por qué tiene ${c.score} puntos`}
       >
+        {senalFuerte && (
+          <p className="flex items-baseline justify-between gap-4 pb-2.5 border-b border-border-subtle text-sm leading-snug text-foreground">
+            <span>“{normalizarCita(senalFuerte)}”</span>
+            {desglose.puntosCita != null && (
+              <span className="font-mono text-[13px] font-semibold tabular-nums text-[color:var(--cap-accent-ink)] shrink-0">
+                {desglose.puntosCita > 0 ? `+${desglose.puntosCita}` : desglose.puntosCita}
+              </span>
+            )}
+          </p>
+        )}
         {motivos.length > 0 ? (
           <ul className="flex flex-col">
             {motivos.map((m) => (
@@ -558,9 +615,9 @@ export function CaptacionCard({ captacion: c, agentName, comprando, onCambiarEst
         )}
         {(c.senales.length > 0 || c.problemasAviso.length > 0) && (
           <div className="flex flex-wrap gap-1.5 pt-3">
-            {c.senales.map((s) => (
+            {c.senales.filter((s) => s.trim() !== senalFuerte).map((s) => (
               <span key={s} className="text-xs px-2.5 py-1 rounded-full text-foreground border border-border">
-                “{s}”
+                “{normalizarCita(s)}”
               </span>
             ))}
             {c.problemasAviso.map((p) => (
@@ -611,16 +668,31 @@ export function CaptacionCard({ captacion: c, agentName, comprando, onCambiarEst
             </div>
           )}
 
-          {(compraMsg || (c.telefonoIntentadoEn && !c.telefono)) && (
-            <p className="flex items-start gap-1.5 text-xs text-secondary">
-              <PhoneOff className="w-3.5 h-3.5 shrink-0 mt-px" />
-              {compraMsg ?? 'Zonaprop no tiene un teléfono disponible para este aviso'}
-            </p>
+          {sinNumero ? (
+            <div className="flex flex-col gap-2">
+              <p role="note" className="flex items-start gap-1.5 rounded-card border border-border bg-surface-raised px-3 py-2 text-xs text-secondary">
+                <PhoneOff className="w-3.5 h-3.5 shrink-0 mt-px" aria-hidden />
+                {avisoCompraSinNumero(c.telefonoIntentadoEn!)}
+              </p>
+              {avisoUrl && (
+                <a href={avisoUrl} target="_blank" rel="noopener noreferrer" className={BTN_GHOST}>
+                  {c.tieneWhatsappEnPortal ? <MessageCircle className="w-4 h-4" aria-hidden /> : <ExternalLink className="w-4 h-4" aria-hidden />}
+                  {c.tieneWhatsappEnPortal ? 'WhatsApp desde el aviso' : 'Ver aviso'}
+                </a>
+              )}
+            </div>
+          ) : (
+            compraMsg && (
+              <p className="flex items-start gap-1.5 text-xs text-secondary">
+                <PhoneOff className="w-3.5 h-3.5 shrink-0 mt-px" />
+                {compraMsg}
+              </p>
+            )
           )}
 
           {c.telefono && <p className="text-xs text-secondary tabular-nums">{c.telefono}</p>}
 
-          {redaccion?.pideSinInmobiliarias && (
+          {(redaccion?.pideSinInmobiliarias || c.rechazaInmobiliarias) && (
             <p role="note" className="flex items-start gap-1.5 rounded-card border border-border bg-surface-raised px-3 py-2 text-xs text-secondary">
               <TriangleAlert className="w-3.5 h-3.5 shrink-0 mt-px" />
               El dueño pidió en el aviso no ser contactado por inmobiliarias. Si le escribís, que sea con algo útil para él y sin insistir.
@@ -702,6 +774,7 @@ export function CaptacionCard({ captacion: c, agentName, comprando, onCambiarEst
                     href={`https://wa.me/${waNumero}?text=${encodeURIComponent(borrador)}`}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={registrarEnvio}
                     className={BTN_OUTLINE}
                   >
                     Enviar por WhatsApp
