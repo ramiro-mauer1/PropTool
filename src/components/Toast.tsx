@@ -146,7 +146,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       
       <div
         aria-live="polite"
-        className="fixed z-[200] flex flex-col gap-2.5 pointer-events-none left-3 right-3 bottom-3 mb-[env(safe-area-inset-bottom,0px)] sm:left-auto sm:right-6 sm:bottom-6 sm:w-full sm:max-w-sm"
+        className="fixed z-[200] flex flex-col gap-2.5 pointer-events-none left-3 right-3 bottom-3 mb-[max(env(safe-area-inset-bottom,0px),var(--bottom-nav-space,0px))] sm:left-auto sm:right-6 sm:bottom-6 sm:w-full sm:max-w-sm"
       >
         <AnimatePresence mode="popLayout">
           {toasts.map((toast) => {

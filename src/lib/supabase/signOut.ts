@@ -14,7 +14,7 @@ export async function signOutAndLeave(scope: 'local' | 'global' = 'local') {
   // propia copia de las cookies: sin este segundo signOut el middleware puede
   // llegar a ver una sesión todavía válida en la navegación siguiente.
   await createClient().auth.signOut({ scope: 'local' });
-  // El login vive en `/` (page.tsx lo muestra cuando no hay sesión); no hay
+  // El login vive en `/` (AppShell lo muestra cuando no hay sesión); no hay
   // ruta `/login`. `replace` evita que "atrás" vuelva a la app ya cerrada.
   window.location.replace('/');
 }

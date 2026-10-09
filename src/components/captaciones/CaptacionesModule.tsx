@@ -335,7 +335,7 @@ export function CaptacionesModule({ agentName = null }: CaptacionesModuleProps) 
               transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
               role="status"
               // Centered with margins, not translate: framer owns `transform` here.
-              className="fixed z-[150] left-3 right-3 bottom-3 mb-[env(safe-area-inset-bottom,0px)] sm:left-0 sm:right-0 sm:mx-auto sm:w-fit sm:min-w-[320px] flex items-center justify-between gap-3 rounded-card border border-border bg-surface-overlay pl-4 pr-1.5 py-1.5 shadow-ambient"
+              className="fixed z-[150] left-3 right-3 bottom-3 mb-[max(env(safe-area-inset-bottom,0px),var(--bottom-nav-space,0px))] sm:left-0 sm:right-0 sm:mx-auto sm:w-fit sm:min-w-[320px] flex items-center justify-between gap-3 rounded-card border border-border bg-surface-overlay pl-4 pr-1.5 py-1.5 shadow-ambient"
             >
               <span className="text-xs text-foreground">
                 Movida a <strong className="font-semibold">{ETAPA_LABEL[movida.hacia]}</strong>

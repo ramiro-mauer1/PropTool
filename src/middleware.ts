@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { hasAppAccess } from '@/lib/auth/access';
 
 // Public without a session: the root path itself (it renders the login view
-// client-side when unauthenticated — see LoginView/page.tsx) and the auth
+// client-side when unauthenticated — see LoginView/AppShell.tsx) and the auth
 // API used to actually establish a session. The two captaciones routes are
 // called by the external search job: no session, they verify a bearer token
 // themselves. Keep them exact — the rest of /api/captaciones needs a session.

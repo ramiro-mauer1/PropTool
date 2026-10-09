@@ -222,6 +222,24 @@
 }
 
 /* ============================================================
+   Barra de navegación inferior (celular)
+   ============================================================ */
+
+/* Alto que ocupa la barra flotante, contando el aire que la separa del
+   borde (o del indicador de inicio en iPhone). El área principal, los toasts
+   y las barras fijas lo usan para no quedar nunca debajo. Vale 0 en
+   escritorio y en pantallas sin barra (login, bienvenida). */
+:root {
+  --bottom-nav-space: 0px;
+}
+@media (max-width: 767.98px) {
+  :root:has([data-bottom-nav]) {
+    /* 56px de barra + 8px de aire arriba + su distancia al borde */
+    --bottom-nav-space: calc(56px + 8px + max(0.75rem, env(safe-area-inset-bottom, 0px)));
+  }
+}
+
+/* ============================================================
    Ajustes táctiles — sólo móvil
    ============================================================ */
 
