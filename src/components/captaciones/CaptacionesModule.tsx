@@ -11,13 +11,14 @@ import {
   type ReactNode,
 } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
-import { RefreshCw, Undo2 } from 'lucide-react';
+import { Layers, RefreshCw, Undo2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCaptaciones } from '@/hooks/useCaptaciones';
 import { useToast } from '@/components/Toast';
-import type { CaptacionEstadoValue } from '@/types/captaciones';
+import type { CaptacionDTO, CaptacionEstadoValue } from '@/types/captaciones';
 import { CaptacionCard } from './CaptacionCard';
 import { ETAPA_LABEL, PESTANIAS, pestaniaDe, type Pestania } from './format';
+import { RevisarModo } from './revisar/RevisarModo';
 
 interface CaptacionesModuleProps {
   agentName?: string | null;
@@ -99,7 +100,10 @@ export function CaptacionesModule({ agentName = null }: CaptacionesModuleProps) 
   const [partido, setPartido] = useState<string>('');
   const [soloBarrioCerrado, setSoloBarrioCerrado] = useState(false);
   const [movida, setMovida] = useState<Movida | null>(null);
+  // Las nuevas visibles al tocar "Revisar"; el modo arma su mazo con ellas.
+  const [revisando, setRevisando] = useState<CaptacionDTO[] | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const revisarBtn = useRef<HTMLButtonElement>(null);
 
   useEffect(() => () => clearTimeout(undoTimer.current), []);
 
@@ -130,9 +134,9 @@ export function CaptacionesModule({ agentName = null }: CaptacionesModuleProps) 
   const visibles = useMemo(() => filtradas.filter((c) => pestaniaDe(c.estado) === pestania), [filtradas, pestania]);
 
   const mover = useCallback(
-    async (id: string, desde: CaptacionEstadoValue, hacia: CaptacionEstadoValue, motivo?: string) => {
+    async (id: string, desde: CaptacionEstadoValue, hacia: CaptacionEstadoValue, motivo?: string): Promise<boolean> => {
       const ok = await cambiarEstado(id, hacia, motivo);
-      if (!ok) return;
+      if (!ok) return false;
       clearTimeout(undoTimer.current);
       if (pestaniaDe(desde) !== pestaniaDe(hacia)) {
         setMovida({ id, desde, hacia });
@@ -145,6 +149,7 @@ export function CaptacionesModule({ agentName = null }: CaptacionesModuleProps) 
           type: 'success',
         });
       }
+      return true;
     },
     [cambiarEstado, showToast]
   );
@@ -276,6 +281,18 @@ export function CaptacionesModule({ agentName = null }: CaptacionesModuleProps) 
             )}
           </div>
 
+          {pestania === 'nuevas' && !loadError && visibles.length > 0 && (
+            <button
+              ref={revisarBtn}
+              type="button"
+              onClick={() => setRevisando(visibles)}
+              className="btn-tactile focus-ring w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 min-h-[48px] md:min-h-[40px] rounded-card bg-accent text-[#08090a] text-sm font-semibold hover:bg-accent-hover"
+            >
+              <Layers className="w-4 h-4" aria-hidden />
+              Revisar ({visibles.length})
+            </button>
+          )}
+
           {/* Lista */}
           {loadError ? (
             <div className="rounded-card border border-border bg-surface p-6 text-center space-y-3">
@@ -351,6 +368,24 @@ export function CaptacionesModule({ agentName = null }: CaptacionesModuleProps) 
             </motion.div>
           )}
         </AnimatePresence>
+
+        {revisando && captaciones && (
+          <RevisarModo
+            candidatas={revisando}
+            captaciones={captaciones}
+            agentName={agentName}
+            comprando={comprando}
+            movida={movida}
+            mover={mover}
+            deshacer={deshacer}
+            cambiarEstado={cambiarEstado}
+            adquirirTelefono={adquirirTelefono}
+            onCerrar={() => {
+              setRevisando(null);
+              requestAnimationFrame(() => revisarBtn.current?.focus());
+            }}
+          />
+        )}
       </div>
     </MotionConfig>
   );

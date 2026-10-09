@@ -38,6 +38,28 @@ export function pestaniaDe(estado: CaptacionEstadoValue): Pestania {
 /** Score cutoffs for the card's opportunity badge (inclusive lower bounds). */
 export const CORTES_PUNTAJE = { alta: 40, buena: 30 } as const;
 
+export function nivelPuntaje(score: number): { id: 'alta' | 'buena' | 'baja'; label: string } {
+  if (score >= CORTES_PUNTAJE.alta) return { id: 'alta', label: 'Alta oportunidad' };
+  if (score >= CORTES_PUNTAJE.buena) return { id: 'buena', label: 'Buena oportunidad' };
+  return { id: 'baja', label: 'Oportunidad baja' };
+}
+
+/** Días publicado desde los que el aviso "lleva mucho": el ángulo de tiempo publicado arranca en 45. */
+export const DIAS_PUBLICADO_LARGO = 90;
+
+/** Antigüedad corta para un chip: "Hoy", "12 días", "+2 meses", "+1 año". */
+export function formatAntiguedad(dias: number | null): string | null {
+  if (dias == null || dias < 0) return null;
+  if (dias === 0) return 'Hoy';
+  if (dias < 30) return `${dias} ${dias === 1 ? 'día' : 'días'}`;
+  if (dias < 365) {
+    const m = Math.floor(dias / 30);
+    return `+${m} ${m === 1 ? 'mes' : 'meses'}`;
+  }
+  const a = Math.floor(dias / 365);
+  return `+${a} ${a === 1 ? 'año' : 'años'}`;
+}
+
 export function formatPrecio(precio: number | null, moneda: string | null): string | null {
   if (precio == null) return null;
   const m = (moneda ?? '').trim().toUpperCase();

@@ -34,6 +34,8 @@
   .captaciones-scope,
   .settings-scope {
     --cap-accent-ink: var(--color-accent);
+    /* Ámbar para avisos suaves (p. ej., mucho tiempo publicado). */
+    --cap-warn-ink: #fbbf24;
     /* El muted global (70% de alfa) queda en ~3.7:1 sobre la superficie;
        acá se usa para metadatos en 11px, así que se sube a ≥4.5:1. */
     --color-text-muted: #7c838f;
@@ -59,6 +61,7 @@
     --color-accent-subtle: rgba(132, 168, 0, 0.08);
     --color-error-muted: rgba(220, 38, 38, 0.1);
     --cap-accent-ink: #4d6400;
+    --cap-warn-ink: #92400e;
     color-scheme: light;
   }
 

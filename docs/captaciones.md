@@ -57,6 +57,17 @@ Campos opcionales agregados en octubre de 2026. Un JSON que no los trae entra ig
 
 Por qué estas reglas: personalizar con datos del aviso multiplica las respuestas; pedir interés ("¿te sirve que te lo mande?") supera a pedir una reunión; los mensajes cortos con una sola pregunta responden más. El precio es la dificultad nº 1 de quien vende sin inmobiliaria (NAR), pero se deja para un seguimiento: en el primer contacto pone al dueño a la defensiva.
 
+## Modo Revisar
+
+En la pestaña Nuevas, el botón "Revisar (N)" abre las visibles con los filtros actuales a pantalla completa, de a una (`src/components/captaciones/revisar/`). El orden (score descendente) se fija al abrir.
+
+- **Derecha / ✓ / →**: abre "Contactar" en un bottom sheet. Deslizar no cambia el estado: pasa a `contactado` recién al tocar "Copiar" o "Enviar por WhatsApp". En la lista, la tarjeta sigue sin cambiar de estado sola.
+- **Izquierda / ✕ / ←**: descarta. Durante 4 s ofrece motivos rápidos, que se guardan en `notas` igual que el motivo del descarte.
+- **Arriba / ↻ / ↑**: la deja para el final, sin tocar el servidor. Al terminar la vuelta se puede volver a las de después.
+- **Z / "Deshacer última"**: vuelve atrás la última decisión; si cambió el estado, lo devuelve a `nuevo`.
+
+Lo único que se guarda en el navegador (`localStorage`, solo del día) son los ids dejados para después; al volver a entrar quedan al final del mazo. La lógica del mazo vive en `mazo.ts`, sin React, con sus tests.
+
 ## Compra de teléfono
 
 - Actor: `memo23/zonaprop-scraper`, por `run-sync-get-dataset-items`, con `maxTotalChargeUsd=0.06`.

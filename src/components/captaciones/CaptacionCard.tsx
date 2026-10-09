@@ -9,39 +9,30 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Copy,
   ExternalLink,
   Home,
-  Loader2,
-  MessageCircle,
   MoreHorizontal,
-  Phone,
-  PhoneOff,
-  RefreshCw,
   ShieldCheck,
   TriangleAlert,
   UserRound,
   Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { normalizarCita, parseMotivo, quitarCitaDelDesglose } from '@/lib/captaciones/motivo';
-import { toWhatsappNumber } from '@/lib/captaciones/phone';
 import { CAPTACION_ESTADOS, type CaptacionDTO, type CaptacionEstadoValue } from '@/types/captaciones';
 import type { CompraTelefonoResultado } from '@/hooks/useCaptaciones';
-import type { ResultadoRedaccion } from '@/lib/captaciones/mensaje/redactar';
 import {
-  CORTES_PUNTAJE,
   ETAPA_LABEL,
   PORTAL_LABEL,
   SIGUIENTE,
-  avisoCompraSinNumero,
   capitalizar,
   formatPrecio,
+  nivelPuntaje,
   precioARevisar,
-  prepararBorrador,
   resumenAmbientes,
   urlAvisoSegura,
 } from './format';
+import { BTN_OUTLINE, BTN_PRIMARY, ContactarPanel, useContactar } from './ContactarPanel';
+import { PuntajeDesglose, desgloseDe } from './PuntajeDesglose';
 
 // Everything copied from third-party listings (anunciante, motivo, señales,
 // borrador) is rendered as plain JSX text — never as HTML.
@@ -56,11 +47,6 @@ interface CaptacionCardProps {
   contactoAbiertoInicial?: boolean;
 }
 
-const BTN =
-  'btn-tactile focus-ring inline-flex items-center justify-center gap-2 rounded-card text-[13px] font-medium min-h-[44px] px-3.5 disabled:opacity-50 disabled:pointer-events-none';
-const BTN_GHOST = `${BTN} border border-border bg-surface-raised text-foreground hover:border-border-hover`;
-const BTN_OUTLINE = `${BTN} min-h-[40px] border border-border text-foreground hover:border-border-hover`;
-const BTN_PRIMARY = `${BTN} bg-accent text-[#08090a] font-semibold hover:bg-accent-hover`;
 const ETIQUETA = 'inline-flex items-center rounded-full border border-border px-2 py-0.5 text-[11px] leading-tight text-secondary';
 
 const MENU_ITEM =
@@ -69,11 +55,15 @@ const MENU_ITEM =
 // The badge and chips sit on the photo, so they keep dark fills in both themes.
 // Every level carries a 1px border (transparent on the solid one) so they all
 // measure the same.
+const NIVEL_CLS = {
+  alta: 'border-transparent bg-[#d4ff32] text-[#08090a]',
+  buena: 'border-[#d4ff32] bg-[rgba(9,9,11,0.75)] text-[#d4ff32] backdrop-blur-sm',
+  baja: 'border-white/15 bg-[#08090a]/80 text-white/85 backdrop-blur-sm',
+} as const;
+
 function nivel(score: number) {
-  if (score >= CORTES_PUNTAJE.alta) return { label: 'Alta oportunidad', cls: 'border-transparent bg-[#d4ff32] text-[#08090a]' };
-  if (score >= CORTES_PUNTAJE.buena)
-    return { label: 'Buena oportunidad', cls: 'border-[#d4ff32] bg-[rgba(9,9,11,0.75)] text-[#d4ff32] backdrop-blur-sm' };
-  return { label: 'Oportunidad baja', cls: 'border-white/15 bg-[#08090a]/80 text-white/85 backdrop-blur-sm' };
+  const n = nivelPuntaje(score);
+  return { label: n.label, cls: NIVEL_CLS[n.id] };
 }
 
 function Foto({ url, alt, score, barrioPrivado }: { url: string | null; alt: string; score: number; barrioPrivado: boolean }) {
@@ -171,20 +161,13 @@ export function CaptacionCard({
   onAdquirirTelefono,
   contactoAbiertoInicial = false,
 }: CaptacionCardProps) {
-  const [borrador, setBorrador] = useState('');
-  const [copiado, setCopiado] = useState(false);
-  // Variantes redactadas a pedido (una por ángulo). Se piden al abrir "Contactar".
-  const [redaccion, setRedaccion] = useState<ResultadoRedaccion | null>(null);
-  const [varianteActiva, setVarianteActiva] = useState(0);
-  const [redactando, setRedactando] = useState(false);
-  const [errorRedaccion, setErrorRedaccion] = useState<string | null>(null);
   const [enlaceCopiado, setEnlaceCopiado] = useState(false);
-  const [panel, setPanel] = useState<'none' | 'descartar' | 'comprar'>('none');
+  const [descartando, setDescartando] = useState(false);
   const [menu, setMenu] = useState<'closed' | 'main' | 'etapas'>('closed');
   const [puntajeOpen, setPuntajeOpen] = useState(false);
   const [contactoOpen, setContactoOpen] = useState(contactoAbiertoInicial);
   const [motivoDescarte, setMotivoDescarte] = useState('');
-  const [compraMsg, setCompraMsg] = useState<string | null>(null);
+  const contacto = useContactar({ captacion: c, agentName, abierto: contactoOpen, onAdquirirTelefono });
   const uid = useId();
   const menuRef = useRef<HTMLDivElement>(null);
   const menuListRef = useRef<HTMLDivElement>(null);
@@ -214,20 +197,12 @@ export function CaptacionCard({
     menuListRef.current?.querySelector<HTMLElement>('[role^="menuitem"]:not([disabled])')?.focus();
   }, [menu]);
 
-  const senalFuerte = c.senalesFuertes.find((s) => s.trim())?.trim() ?? null;
-  // La cita de arriba reemplaza a su fila en el desglose (y se lleva sus puntos).
-  const desglose = quitarCitaDelDesglose(parseMotivo(c.motivo), senalFuerte);
-  const motivos = desglose.items
-    .map((m, i) => ({ ...m, i }))
-    .sort((a, b) => (b.puntos ?? -Infinity) - (a.puntos ?? -Infinity) || a.i - b.i);
+  const desglose = desgloseDe(c);
   const precio = formatPrecio(c.precio, c.moneda);
   const ambientes = resumenAmbientes(c);
-  const waNumero = toWhatsappNumber(c.telefono);
   const avisoUrl = urlAvisoSegura(c.url);
   const portal = PORTAL_LABEL[c.portal] ?? capitalizar(c.portal);
   const puedeComprar = c.portal === 'zonaprop' && !c.telefono && !c.telefonoIntentadoEn;
-  // Ya se pagó la consulta y Zonaprop no tenía número: queda a la vista, con la alternativa.
-  const sinNumero = !!c.telefonoIntentadoEn && !c.telefono;
   const revisarPrecio = precioARevisar(c.motivo);
   const siguiente = SIGUIENTE[c.estado];
   const titulo = `${capitalizar(c.tipo)} en ${c.operacion}`;
@@ -238,65 +213,6 @@ export function CaptacionCard({
       : c.diasPublicado === 0
       ? 'publicado hoy'
       : `hace ${c.diasPublicado} ${c.diasPublicado === 1 ? 'día' : 'días'}`;
-
-  const redactar = async () => {
-    setRedactando(true);
-    setErrorRedaccion(null);
-    try {
-      const res = await fetch(`/api/captaciones/${c.id}/mensaje`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'No se pudo redactar el mensaje.');
-      const r = data as ResultadoRedaccion;
-      setRedaccion(r);
-      setVarianteActiva(0);
-      if (r.variantes[0]) setBorrador(r.variantes[0].mensaje);
-    } catch (err) {
-      setErrorRedaccion(err instanceof Error ? err.message : 'No se pudo redactar el mensaje.');
-      // Sin red: el borrador que trajo el buscador es mejor que nada.
-      setBorrador((actual) => actual || prepararBorrador(c.borradorMensaje, agentName));
-    } finally {
-      setRedactando(false);
-    }
-  };
-
-  // Se redacta la primera vez que el agente abre "Contactar", no antes: cada
-  // redacción es una llamada a la IA y la mayoría de las tarjetas no se abren.
-  const pidioRedaccion = useRef(false);
-  useEffect(() => {
-    if (!contactoOpen || pidioRedaccion.current) return;
-    pidioRedaccion.current = true;
-    void redactar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al abrir por primera vez
-  }, [contactoOpen]);
-
-  const elegirVariante = (i: number) => {
-    if (!redaccion?.variantes[i]) return;
-    setVarianteActiva(i);
-    setBorrador(redaccion.variantes[i].mensaje);
-  };
-
-  // Registra qué se mandó, para medir qué ángulo responde mejor. No bloquea al
-  // corredor: si falla, el mensaje igual sale.
-  const registrarEnvio = () => {
-    const angulo = redaccion?.variantes[varianteActiva]?.angulo ?? 'borrador';
-    void fetch(`/api/captaciones/${c.id}/envio`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ angulo, mensaje: borrador }),
-      keepalive: true,
-    }).catch(() => {});
-  };
-
-  const copiar = async () => {
-    try {
-      await navigator.clipboard.writeText(borrador);
-      registrarEnvio();
-      setCopiado(true);
-      setTimeout(() => setCopiado(false), 1800);
-    } catch {
-      setCopiado(false);
-    }
-  };
 
   const copiarEnlace = async () => {
     setMenu('closed');
@@ -314,15 +230,13 @@ export function CaptacionCard({
   const pedirTelefono = () => {
     setMenu('closed');
     setContactoOpen(true);
-    setPanel('comprar');
+    setDescartando(false);
+    contacto.setCompraAbierta(true);
   };
 
-  const comprar = async () => {
-    setPanel('none');
-    setCompraMsg(null);
-    const r = await onAdquirirTelefono();
-    // Sin número no hace falta mensaje: la tarjeta ya muestra el aviso fijo.
-    if (!r.ok) setCompraMsg(r.error);
+  const abrirDescarte = () => {
+    contacto.setCompraAbierta(false);
+    setDescartando(true);
   };
 
   const onMenuKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -342,36 +256,6 @@ export function CaptacionCard({
       items[next].focus();
     }
   };
-
-  const llamar = c.telefono ? (
-    <a href={`tel:${c.telefono.replace(/[^\d+]/g, '')}`} className={BTN_GHOST}>
-      <Phone className="w-4 h-4" />
-      Llamar
-    </a>
-  ) : puedeComprar ? (
-    <button
-      type="button"
-      className={BTN_GHOST}
-      disabled={comprando}
-      onClick={() => setPanel(panel === 'comprar' ? 'none' : 'comprar')}
-      aria-expanded={panel === 'comprar'}
-    >
-      {comprando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Phone className="w-4 h-4" />}
-      {comprando ? 'Buscando teléfono…' : 'Adquirir teléfono'}
-    </button>
-  ) : null;
-
-  const whatsapp = sinNumero ? null : waNumero ? (
-    <a href={`https://wa.me/${waNumero}`} target="_blank" rel="noopener noreferrer" className={BTN_GHOST}>
-      <MessageCircle className="w-4 h-4" />
-      WhatsApp
-    </a>
-  ) : c.tieneWhatsappEnPortal && avisoUrl ? (
-    <a href={avisoUrl} target="_blank" rel="noopener noreferrer" className={BTN_GHOST}>
-      <MessageCircle className="w-4 h-4" />
-      WhatsApp en el aviso
-    </a>
-  ) : null;
 
   return (
     <motion.article
@@ -502,7 +386,7 @@ export function CaptacionCard({
                           className={cn(MENU_ITEM, 'text-error')}
                           onClick={() => {
                             setMenu('closed');
-                            setPanel('descartar');
+                            abrirDescarte();
                           }}
                         >
                           Descartar
@@ -526,7 +410,7 @@ export function CaptacionCard({
                         disabled={c.estado === e}
                         onClick={() => {
                           setMenu('closed');
-                          if (e === 'descartado') setPanel('descartar');
+                          if (e === 'descartado') abrirDescarte();
                           else onCambiarEstado(e);
                         }}
                         className={MENU_ITEM}
@@ -546,13 +430,13 @@ export function CaptacionCard({
           {enlaceCopiado ? 'Enlace copiado' : ''}
         </p>
 
-        {panel === 'descartar' && (
+        {descartando && (
           <form
             className="mt-3 space-y-2"
             onSubmit={(e) => {
               e.preventDefault();
               onCambiarEstado('descartado', motivoDescarte.trim() || undefined);
-              setPanel('none');
+              setDescartando(false);
             }}
           >
             <label className="text-xs text-secondary" htmlFor={`${uid}-motivo`}>
@@ -571,7 +455,7 @@ export function CaptacionCard({
               <button type="submit" className={BTN_PRIMARY}>
                 Descartar
               </button>
-              <button type="button" className={BTN_OUTLINE} onClick={() => setPanel('none')}>
+              <button type="button" className={BTN_OUTLINE} onClick={() => setDescartando(false)}>
                 Cancelar
               </button>
             </div>
@@ -587,47 +471,7 @@ export function CaptacionCard({
         icon={<ChartNoAxesColumn className="w-[18px] h-[18px]" />}
         title={`Por qué tiene ${c.score} puntos`}
       >
-        {senalFuerte && (
-          <p className="flex items-baseline justify-between gap-4 pb-2.5 border-b border-border-subtle text-sm leading-snug text-foreground">
-            <span>“{normalizarCita(senalFuerte)}”</span>
-            {desglose.puntosCita != null && (
-              <span className="font-mono text-[13px] font-semibold tabular-nums text-[color:var(--cap-accent-ink)] shrink-0">
-                {desglose.puntosCita > 0 ? `+${desglose.puntosCita}` : desglose.puntosCita}
-              </span>
-            )}
-          </p>
-        )}
-        {motivos.length > 0 ? (
-          <ul className="flex flex-col">
-            {motivos.map((m) => (
-              <li key={m.i} className="flex items-baseline justify-between gap-4 py-2.5 border-b border-border-subtle text-[13px]">
-                <span className="text-secondary leading-snug">{capitalizar(m.texto)}</span>
-                {m.puntos != null && (
-                  <span className="font-mono font-semibold tabular-nums text-[color:var(--cap-accent-ink)] shrink-0">
-                    {m.puntos > 0 ? `+${m.puntos}` : m.puntos}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-[13px] text-secondary">No hay desglose disponible para este puntaje.</p>
-        )}
-        {(c.senales.length > 0 || c.problemasAviso.length > 0) && (
-          <div className="flex flex-wrap gap-1.5 pt-3">
-            {c.senales.filter((s) => s.trim() !== senalFuerte).map((s) => (
-              <span key={s} className="text-xs px-2.5 py-1 rounded-full text-foreground border border-border">
-                “{normalizarCita(s)}”
-              </span>
-            ))}
-            {c.problemasAviso.map((p) => (
-              <span key={p} className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full text-muted border border-dashed border-border">
-                <TriangleAlert className="w-3 h-3" />
-                {capitalizar(p)}
-              </span>
-            ))}
-          </div>
-        )}
+        <PuntajeDesglose captacion={c} desglose={desglose} />
       </Acordeon>
 
       {/* ── Contactar al dueño ────────────────────────────────────────── */}
@@ -638,152 +482,7 @@ export function CaptacionCard({
         icon={<UserRound className="w-[18px] h-[18px]" />}
         title={dueno ? `Contactar a ${dueno}` : 'Contactar al dueño'}
       >
-        <div className="flex flex-col gap-3">
-          {(llamar || whatsapp) && (
-            <div className={cn('grid gap-2', llamar && whatsapp ? 'grid-cols-2' : 'grid-cols-1')}>
-              {llamar}
-              {whatsapp}
-            </div>
-          )}
-
-          {comprando && (
-            <p className="text-xs text-secondary" role="status">
-              Consultando Zonaprop. Puede tardar hasta un minuto; podés seguir trabajando.
-            </p>
-          )}
-
-          {panel === 'comprar' && (
-            <div role="alertdialog" aria-label="Confirmar compra del teléfono" className="rounded-card border border-border bg-surface-raised p-3 space-y-2.5">
-              <p className="text-[13px] text-foreground">
-                Comprar el teléfono de este aviso cuesta <strong className="tabular-nums">≈ USD 0,04</strong>. Si Zonaprop no lo tiene, se cobra menos de USD 0,01 y no se puede reintentar.
-              </p>
-              <div className="flex gap-2">
-                <button type="button" className={BTN_PRIMARY} onClick={comprar}>
-                  Comprar teléfono
-                </button>
-                <button type="button" className={BTN_OUTLINE} onClick={() => setPanel('none')}>
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          )}
-
-          {sinNumero ? (
-            <div className="flex flex-col gap-2">
-              <p role="note" className="flex items-start gap-1.5 rounded-card border border-border bg-surface-raised px-3 py-2 text-xs text-secondary">
-                <PhoneOff className="w-3.5 h-3.5 shrink-0 mt-px" aria-hidden />
-                {avisoCompraSinNumero(c.telefonoIntentadoEn!)}
-              </p>
-              {avisoUrl && (
-                <a href={avisoUrl} target="_blank" rel="noopener noreferrer" className={BTN_GHOST}>
-                  {c.tieneWhatsappEnPortal ? <MessageCircle className="w-4 h-4" aria-hidden /> : <ExternalLink className="w-4 h-4" aria-hidden />}
-                  {c.tieneWhatsappEnPortal ? 'WhatsApp desde el aviso' : 'Ver aviso'}
-                </a>
-              )}
-            </div>
-          ) : (
-            compraMsg && (
-              <p className="flex items-start gap-1.5 text-xs text-secondary">
-                <PhoneOff className="w-3.5 h-3.5 shrink-0 mt-px" />
-                {compraMsg}
-              </p>
-            )
-          )}
-
-          {c.telefono && <p className="text-xs text-secondary tabular-nums">{c.telefono}</p>}
-
-          {(redaccion?.pideSinInmobiliarias || c.rechazaInmobiliarias) && (
-            <p role="note" className="flex items-start gap-1.5 rounded-card border border-border bg-surface-raised px-3 py-2 text-xs text-secondary">
-              <TriangleAlert className="w-3.5 h-3.5 shrink-0 mt-px" />
-              El dueño pidió en el aviso no ser contactado por inmobiliarias. Si le escribís, que sea con algo útil para él y sin insistir.
-            </p>
-          )}
-
-          {(borrador || redactando || redaccion || errorRedaccion) && (
-            <>
-              <div className="mt-1 flex items-center justify-between gap-2">
-                <label htmlFor={`${uid}-borrador`} className="text-xs text-secondary">
-                  Mensaje para el dueño
-                </label>
-                <button
-                  type="button"
-                  onClick={redactar}
-                  disabled={redactando}
-                  className="flex items-center gap-1 text-xs text-secondary hover:text-foreground disabled:opacity-50"
-                >
-                  <RefreshCw className={cn('w-3 h-3', redactando && 'animate-spin')} />
-                  {redactando ? 'Redactando…' : 'Otras versiones'}
-                </button>
-              </div>
-
-              {redaccion && redaccion.variantes.length > 1 && (
-                <div role="radiogroup" aria-label="Enfoque del mensaje" className="-mt-1 flex flex-wrap gap-1.5">
-                  {redaccion.variantes.map((v, i) => (
-                    <button
-                      key={v.angulo}
-                      type="button"
-                      role="radio"
-                      aria-checked={varianteActiva === i}
-                      onClick={() => elegirVariante(i)}
-                      className={cn(
-                        'relative rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors duration-200 active:scale-[0.96]',
-                        varianteActiva === i
-                          ? 'border-accent/40 text-[color:var(--cap-accent-ink)]'
-                          : 'border-border text-secondary hover:text-foreground hover:border-border-hover'
-                      )}
-                    >
-                      {/* El resaltado se desliza hacia el chip elegido. */}
-                      {varianteActiva === i && (
-                        <motion.span
-                          layoutId={`${uid}-variante`}
-                          transition={{ type: 'spring', stiffness: 500, damping: 38 }}
-                          className="absolute inset-0 rounded-full bg-accent-muted"
-                        />
-                      )}
-                      <span className="relative">{v.etiqueta}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {errorRedaccion && <p className="-mt-1 text-xs text-error">{errorRedaccion}</p>}
-              <motion.div
-                key={redaccion ? `variante-${varianteActiva}` : 'vacio'}
-                initial={{ opacity: 0.35 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
-                className="-mt-1.5"
-              >
-              <textarea
-                id={`${uid}-borrador`}
-                value={borrador}
-                onChange={(e) => setBorrador(e.target.value)}
-                disabled={redactando && !borrador}
-                placeholder={redactando ? 'Redactando un mensaje a partir de los datos de este aviso…' : ''}
-                rows={5}
-                className="w-full resize-y rounded-card border border-border bg-surface-sunken p-3 text-[13px] leading-relaxed text-foreground placeholder:text-muted focus-ring focus:border-border-hover disabled:cursor-progress"
-              />
-              </motion.div>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={copiar} disabled={!borrador.trim()} className={cn(BTN_OUTLINE, 'disabled:opacity-40 disabled:pointer-events-none')} aria-live="polite">
-                  {copiado ? <Check className="w-4 h-4 text-[color:var(--cap-accent-ink)]" /> : <Copy className="w-4 h-4" />}
-                  {copiado ? 'Copiado' : 'Copiar'}
-                </button>
-                {waNumero && borrador.trim() && (
-                  <a
-                    href={`https://wa.me/${waNumero}?text=${encodeURIComponent(borrador)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={registrarEnvio}
-                    className={BTN_OUTLINE}
-                  >
-                    Enviar por WhatsApp
-                  </a>
-                )}
-              </div>
-            </>
-          )}
-        </div>
+        <ContactarPanel captacion={c} comprando={comprando} control={contacto} />
       </Acordeon>
 
       {(c.notas || c.contactId) && (
