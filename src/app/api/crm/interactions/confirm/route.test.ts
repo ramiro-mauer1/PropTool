@@ -87,7 +87,7 @@ function buildFakePrisma() {
 vi.mock('@/lib/db', () => ({ prisma: buildFakePrisma() }));
 vi.mock('@/lib/supabase/server', () => ({
   createClient: () => ({
-    auth: { getUser: async () => ({ data: { user: { id: 'u1', user_metadata: { message_tone: 'formal' } } } }) },
+    auth: { getUser: async () => ({ data: { user: { id: 'u1', app_metadata: { plinth_access: true }, user_metadata: { message_tone: 'formal' } } } }) },
   }),
 }));
 

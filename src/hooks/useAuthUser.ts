@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { hasAppAccess } from '@/lib/auth/access';
 import { isStartModule, messageToneFromMetadata, type MessageTone, type StartModule } from '@/lib/userPreferences';
 
 export interface AuthUser {
@@ -15,8 +16,12 @@ export interface AuthUser {
   needsOnboarding: boolean;
 }
 
-function toAuthUser(user: { id: string; email?: string; user_metadata?: Record<string, unknown> } | null): AuthUser | null {
-  if (!user) return null;
+function toAuthUser(
+  user: { id: string; email?: string; app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> } | null
+): AuthUser | null {
+  // A session without the access flag (sign-up that bypassed the allowlist)
+  // shows the login, same as no session. The server enforces this anyway.
+  if (!user || !hasAppAccess(user)) return null;
   const fullName = typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : '';
   const avatarUrl = typeof user.user_metadata?.avatar_url === 'string' ? user.user_metadata.avatar_url : null;
   const phone = typeof user.user_metadata?.phone === 'string' ? user.user_metadata.phone : '';

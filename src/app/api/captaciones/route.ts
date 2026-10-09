@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/auth/requireUser';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -10,10 +10,8 @@ export const runtime = 'nodejs';
 // show (descripcion, lat/lon) are left out.
 export async function GET() {
   // Owners' names and phones: never rely on the middleware matcher alone.
-  const {
-    data: { user },
-  } = await createClient().auth.getUser();
-  if (!user) return NextResponse.json({ error: 'No autorizado.' }, { status: 401 });
+  const auth = await requireUser();
+  if (auth.response) return auth.response;
 
   const captaciones = await prisma.captacion.findMany({
     orderBy: [{ score: 'desc' }, { ultimaVezVista: 'desc' }],

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/auth/requireUser';
 import { normalizeCurrency } from '@/lib/captaciones/contract';
 import { phoneDigits } from '@/lib/captaciones/phone';
 import { isCaptacionEstado } from '@/types/captaciones';
@@ -16,13 +16,13 @@ const ESTADOS_RESPONDIO: string[] = ['respondio', 'tasacion', 'captado'];
 // listing over to the Cartera: it creates — or reuses — a Contact and a
 // Property and stores their ids, so marking it twice never duplicates them.
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   // Middleware already requires a session; checked again here so the route
   // never depends on the matcher alone.
-  const {
-    data: { user },
-  } = await createClient().auth.getUser();
-  if (!user) return NextResponse.json({ error: 'No autorizado.' }, { status: 401 });
+  const auth = await requireUser();
+  if (auth.response) return auth.response;
+  const { id } = await params;
+  const { user } = auth;
 
   let body: { estado?: unknown; motivo?: unknown };
   try {
@@ -37,7 +37,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const estado = body.estado;
   const motivo = typeof body.motivo === 'string' ? body.motivo.trim().slice(0, MAX_MOTIVO) : '';
 
-  const captacion = await prisma.captacion.findUnique({ where: { id: params.id } });
+  const captacion = await prisma.captacion.findUnique({ where: { id: id } });
   if (!captacion) return NextResponse.json({ error: 'Captación no encontrada.' }, { status: 404 });
 
   const now = new Date();

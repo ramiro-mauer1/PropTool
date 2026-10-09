@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/auth/requireUser';
 import { ApifyError, SIN_TELEFONO_MSG, buyZonapropPhone } from '@/lib/captaciones/apify';
+import { enforceRateLimits } from '@/lib/security/rateLimit';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -12,18 +13,24 @@ export const maxDuration = 120;
 // A purchase that never finished (crash, timeout) unblocks after this long.
 const LOCK_TTL_MS = 3 * 60 * 1000;
 
+// Spend caps: each purchase costs up to USD 0.06 (see apify.ts). The daily
+// cap is for the whole team and is what bounds the bill if an account is
+// compromised; override with TELEFONO_DAILY_LIMIT.
+const DAILY_LIMIT = Number(process.env.TELEFONO_DAILY_LIMIT) || 60;
+const PER_USER_HOURLY_LIMIT = 30;
+
 // POST: buys the listing's phone through Apify. Only on an explicit broker
 // action, and at most once per captación — enforced here, not just in the UI,
 // so a double click or a second tab never pays twice.
 
-export async function POST(_req: Request, { params }: { params: { id: string } }) {
+export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   // Middleware already requires a session; this spends money, so check again.
-  const {
-    data: { user },
-  } = await createClient().auth.getUser();
-  if (!user) return NextResponse.json({ error: 'No autorizado.' }, { status: 401 });
+  const auth = await requireUser();
+  if (auth.response) return auth.response;
+  const { id } = await params;
+  const { user } = auth;
 
-  const captacion = await prisma.captacion.findUnique({ where: { id: params.id } });
+  const captacion = await prisma.captacion.findUnique({ where: { id: id } });
   if (!captacion) return NextResponse.json({ error: 'Captación no encontrada.' }, { status: 404 });
 
   if (captacion.portal !== 'zonaprop') {
@@ -39,6 +46,16 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
       { status: 409 }
     );
   }
+
+  // Counted only for real purchase attempts (the checks above are free).
+  const limited = await enforceRateLimits(
+    [
+      { key: `telefono:user:${user.id}`, limit: PER_USER_HOURLY_LIMIT, windowSeconds: 60 * 60 },
+      { key: 'telefono:global', limit: DAILY_LIMIT, windowSeconds: 24 * 60 * 60 },
+    ],
+    'Se alcanzó el límite de compras de teléfonos por ahora. Probá más tarde.'
+  );
+  if (limited) return limited;
 
   // Atomic claim: only one request can flip the lock, everyone else gets 409.
   const now = new Date();

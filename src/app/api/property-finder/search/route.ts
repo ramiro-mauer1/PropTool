@@ -1,6 +1,8 @@
 import { type NextRequest } from 'next/server';
-import { isSearchConfigured, searchListings, type RawListing } from '@/lib/property-finder/serpSearch';
+import { SearchError, isSearchConfigured, searchListings, type RawListing } from '@/lib/property-finder/serpSearch';
 import { classifyOwnership } from '@/lib/property-finder/ownerClassifier';
+import { requireUser } from '@/lib/auth/requireUser';
+import { enforceRateLimits } from '@/lib/security/rateLimit';
 import type {
   PropertySearchQuery,
   PropertySearchResult,
@@ -191,7 +193,18 @@ function heuristicSummary(result: PropertySearchResult, query: PropertySearchQue
 
 // ─── POST Handler ─────────────────────────────────────────────────────────────
 
+const MAX_QUERY_LENGTH = 300;
+
 export async function POST(request: NextRequest): Promise<Response> {
+  const auth = await requireUser();
+  if (auth.response) return auth.response;
+  // Each search spends SerpApi quota (and a Gemini call).
+  const limited = await enforceRateLimits(
+    [{ key: `search:user:${auth.user.id}`, limit: 60, windowSeconds: 60 * 60 }],
+    'Llegaste al límite de búsquedas por ahora. Probá más tarde.'
+  );
+  if (limited) return limited;
+
   let isCancelled = false;
   request.signal.addEventListener('abort', () => { isCancelled = true; });
 
@@ -204,8 +217,8 @@ export async function POST(request: NextRequest): Promise<Response> {
       };
 
       try {
-        const body = (await request.json()) as { query?: string };
-        const rawQuery = (body.query ?? '').trim();
+        const body = (await request.json()) as { query?: unknown };
+        const rawQuery = typeof body.query === 'string' ? body.query.trim().slice(0, MAX_QUERY_LENGTH) : '';
 
         if (!rawQuery) {
           send({ type: 'error', message: 'La consulta no puede estar vacía.' });
@@ -304,9 +317,12 @@ export async function POST(request: NextRequest): Promise<Response> {
         send({ type: 'complete', totalResults: scored.length });
 
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Error inesperado en el pipeline';
+        // Upstream errors can carry internal detail: log it, show a generic message.
         console.error('[PropertyFinder] Error:', err);
-        send({ type: 'error', message: msg });
+        send({
+          type: 'error',
+          message: err instanceof SearchError ? err.message : 'No se pudo completar la búsqueda. Probá de nuevo.',
+        });
       } finally {
         try { controller.close(); } catch { /* already closed */ }
       }

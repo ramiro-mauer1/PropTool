@@ -11,7 +11,7 @@ interface Row {
 }
 
 let rows: Row[];
-let sessionUser: { id: string } | null;
+let sessionUser: { id: string; app_metadata?: Record<string, unknown> } | null;
 
 function buildFakePrisma() {
   return {
@@ -37,6 +37,11 @@ function buildFakePrisma() {
 }
 
 vi.mock('@/lib/db', () => ({ prisma: buildFakePrisma() }));
+let rateLimited = false;
+vi.mock('@/lib/security/rateLimit', () => ({
+  enforceRateLimits: async () =>
+    rateLimited ? Response.json({ error: 'Se alcanzó el límite de compras de teléfonos por ahora.' }, { status: 429 }) : null,
+}));
 vi.mock('@/lib/supabase/server', () => ({
   createClient: () => ({ auth: { getUser: async () => ({ data: { user: sessionUser } }) } }),
 }));
@@ -51,7 +56,7 @@ function apifyResponds(items: unknown[]) {
 }
 
 function call(id = 'cap-1') {
-  return POST(new Request(`http://localhost/api/captaciones/${id}/telefono`, { method: 'POST' }), { params: { id } });
+  return POST(new Request(`http://localhost/api/captaciones/${id}/telefono`, { method: 'POST' }), { params: Promise.resolve({ id }) });
 }
 
 beforeEach(() => {
@@ -66,7 +71,8 @@ beforeEach(() => {
       telefonoCompraIniciadaEn: null,
     },
   ];
-  sessionUser = { id: 'user-1' };
+  sessionUser = { id: 'user-1', app_metadata: { plinth_access: true } };
+  rateLimited = false;
   fetchMock.mockReset();
   process.env.APIFY_TOKEN = 'apify-test';
 });
@@ -142,5 +148,18 @@ describe('POST /api/captaciones/[id]/telefono', () => {
     sessionUser = null;
     expect((await call()).status).toBe(401);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rechaza una sesión sin acceso (registro que salteó la lista de autorizados)', async () => {
+    sessionUser = { id: 'intruso' };
+    expect((await call()).status).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('no compra cuando se alcanzó el tope de gasto', async () => {
+    rateLimited = true;
+    expect((await call()).status).toBe(429);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(rows[0].telefonoCompraIniciadaEn).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 let rows: { id: string; anguloEnviado: string | null; mensajeEnviado: string | null; enviadoEn: Date | null }[];
-let user: { id: string } | null;
+let user: { id: string; app_metadata?: Record<string, unknown> } | null;
 
 vi.mock('@/lib/db', () => ({
   prisma: {
@@ -28,12 +28,12 @@ function post(body: unknown, id = 'cap-1') {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
-    { params: { id } }
+    { params: Promise.resolve({ id }) }
   );
 }
 
 beforeEach(() => {
-  user = { id: 'u1' };
+  user = { id: 'u1', app_metadata: { plinth_access: true } };
   rows = [{ id: 'cap-1', anguloEnviado: null, mensajeEnviado: null, enviadoEn: null }];
 });
 

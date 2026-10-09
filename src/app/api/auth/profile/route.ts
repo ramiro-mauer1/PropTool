@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/auth/requireUser';
+import { enforceRateLimits } from '@/lib/security/rateLimit';
+import { PWNED_PASSWORD_MSG, isPwnedPassword } from '@/lib/security/pwnedPassword';
 import { isMessageTone, isStartModule } from '@/lib/userPreferences';
 
 export const dynamic = 'force-dynamic';
@@ -19,13 +21,9 @@ interface ProfileRequestBody {
 }
 
 export async function PATCH(req: Request) {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: 'No autenticado.' }, { status: 401 });
-  }
+  const auth = await requireUser();
+  if (auth.response) return auth.response;
+  const { user, supabase } = auth;
 
   let body: ProfileRequestBody;
   try {
@@ -34,8 +32,11 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'Body inválido, se esperaba JSON.' }, { status: 400 });
   }
 
-  const name = body.name?.trim();
-  const password = body.password;
+  const name = typeof body.name === 'string' ? body.name.trim() : undefined;
+  const password = typeof body.password === 'string' ? body.password : undefined;
+  if (name && name.length > 80) {
+    return NextResponse.json({ error: 'El nombre es demasiado largo (máx. 80).' }, { status: 400 });
+  }
   const hasAvatarUpdate = 'avatarUrl' in body;
   const hasPhoneUpdate = typeof body.phone === 'string';
   const phone = body.phone?.trim() ?? '';
@@ -63,12 +64,17 @@ export async function PATCH(req: Request) {
   if (password && password.length < 8) {
     return NextResponse.json({ error: 'La contraseña debe tener al menos 8 caracteres.' }, { status: 400 });
   }
+  if (password && password.length > 128) {
+    return NextResponse.json({ error: 'La contraseña es demasiado larga (máx. 128).' }, { status: 400 });
+  }
   if (password) {
     // Una sesión abierta en un equipo ajeno no debería bastar para quedarse
     // con la cuenta: se exige la contraseña actual para cambiarla.
-    if (!body.currentPassword) {
+    if (typeof body.currentPassword !== 'string' || !body.currentPassword) {
       return NextResponse.json({ error: 'Ingresá tu contraseña actual.' }, { status: 400 });
     }
+    const limited = await enforceRateLimits([{ key: `password-check:${user.id}`, limit: 5, windowSeconds: 15 * 60 }]);
+    if (limited) return limited;
     const { error: verifyError } = await supabase.auth.signInWithPassword({
       email: user.email!,
       password: body.currentPassword,
@@ -76,9 +82,15 @@ export async function PATCH(req: Request) {
     if (verifyError) {
       return NextResponse.json({ error: 'La contraseña actual no es correcta.' }, { status: 401 });
     }
+    if (await isPwnedPassword(password)) {
+      return NextResponse.json({ error: PWNED_PASSWORD_MSG }, { status: 400 });
+    }
   }
   if (hasPhoneUpdate && phone && !/^\+?[\d\s()-]{6,20}$/.test(phone)) {
     return NextResponse.json({ error: 'Teléfono inválido.' }, { status: 400 });
+  }
+  if (hasAvatarUpdate && avatarUrl !== null && typeof avatarUrl !== 'string') {
+    return NextResponse.json({ error: 'URL de avatar inválida.' }, { status: 400 });
   }
   if (avatarUrl) {
     // Only accept URLs pointing at this user's own folder in the public

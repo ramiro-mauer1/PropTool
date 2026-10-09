@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db';
 import { LEAD_STATUSES, URGENCY_LEVELS, type LeadStatusValue, type UrgencyValue } from '@/lib/crm-assistant/extraction';
 import { computeFollowupDueDate } from '@/lib/crm-assistant/followupLogic';
 import { draftFollowupMessage } from '@/lib/crm-assistant/messageDraft';
-import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/auth/requireUser';
 import { messageToneFromMetadata } from '@/lib/userPreferences';
 
 export const dynamic = 'force-dynamic';
@@ -29,6 +29,28 @@ interface ConfirmRequestBody {
   agent?: string | null;
 }
 
+// Caps on free-text fields, so a request can't bloat the database.
+const MAX_LENGTHS = {
+  idempotencyKey: 100,
+  rawText: 10_000,
+  rawTranscript: 10_000,
+  contactName: 120,
+  propertyReference: 300,
+  summary: 2000,
+  agent: 80,
+  contactId: 100,
+  propertyId: 100,
+} as const;
+
+function fieldsTooLong(body: ConfirmRequestBody): string | null {
+  for (const [field, max] of Object.entries(MAX_LENGTHS)) {
+    const v = (body as unknown as Record<string, unknown>)[field];
+    if (v == null) continue;
+    if (typeof v !== 'string' || v.length > max) return field;
+  }
+  return null;
+}
+
 function isLeadStatus(v: unknown): v is LeadStatusValue {
   return typeof v === 'string' && (LEAD_STATUSES as readonly string[]).includes(v);
 }
@@ -37,6 +59,10 @@ function isUrgency(v: unknown): v is UrgencyValue {
 }
 
 export async function POST(req: Request) {
+  const auth = await requireUser();
+  if (auth.response) return auth.response;
+  const { user } = auth;
+
   let body: ConfirmRequestBody;
   try {
     body = await req.json();
@@ -52,6 +78,10 @@ export async function POST(req: Request) {
   }
   if (!body.rawText || !body.contactName?.trim()) {
     return NextResponse.json({ error: 'Faltan rawText o contactName.' }, { status: 400 });
+  }
+  const invalidField = fieldsTooLong(body);
+  if (invalidField) {
+    return NextResponse.json({ error: `${invalidField} inválido o demasiado largo.` }, { status: 400 });
   }
   if (!isLeadStatus(body.leadStatus)) {
     return NextResponse.json({ error: 'leadStatus inválido.' }, { status: 400 });
@@ -76,11 +106,8 @@ export async function POST(req: Request) {
     });
   }
 
-  const {
-    data: { user },
-  } = await createClient().auth.getUser();
   const suggestedMessage = await draftFollowupMessage({
-    tone: messageToneFromMetadata(user?.user_metadata),
+    tone: messageToneFromMetadata(user.user_metadata),
     contactName: body.contactName,
     propertyReference: body.propertyReference,
     summary: body.summary,

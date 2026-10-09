@@ -225,7 +225,7 @@ async function fetchPage(
 
   if (data.error) {
     if (/run out of searches|monthly limit/i.test(data.error)) {
-      throw new Error('SerpApi: cuota mensual gratuita agotada, esperá al próximo mes o subí de plan.');
+      throw new SearchError('SerpApi: cuota mensual gratuita agotada, esperá al próximo mes o subí de plan.');
     }
     // "Google hasn't returned any results" is normal on a secondary/optional
     // slice once results run out — treat it as empty, not a hard failure.
@@ -236,9 +236,17 @@ async function fetchPage(
   return data.organic_results ?? [];
 }
 
+/** An error whose message is safe and useful to show the agent as is. */
+export class SearchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SearchError';
+  }
+}
+
 export async function searchListings(query: PropertySearchQuery): Promise<RawListing[]> {
   if (!isSearchConfigured()) {
-    throw new Error('La búsqueda no está configurada: falta SERPAPI_API_KEY en el entorno.');
+    throw new SearchError('La búsqueda no está configurada: falta SERPAPI_API_KEY en el entorno.');
   }
 
   // One request per portal, not one combined site:A OR site:B query: each

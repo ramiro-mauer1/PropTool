@@ -99,7 +99,7 @@ export function CaptacionesModule({ agentName = null }: CaptacionesModuleProps) 
   const [partido, setPartido] = useState<string>('');
   const [soloBarrioCerrado, setSoloBarrioCerrado] = useState(false);
   const [movida, setMovida] = useState<Movida | null>(null);
-  const undoTimer = useRef<ReturnType<typeof setTimeout>>();
+  const undoTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => () => clearTimeout(undoTimer.current), []);
 

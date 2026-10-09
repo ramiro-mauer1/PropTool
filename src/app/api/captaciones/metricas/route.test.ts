@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 type Row = { anguloEnviado: string | null; estado: string; respondioEn: Date | null; captadoEn: Date | null };
 let rows: Row[];
-let user: { id: string } | null;
+let user: { id: string; app_metadata?: Record<string, unknown> } | null;
 
 vi.mock('@/lib/db', () => ({
   prisma: {
@@ -19,7 +19,7 @@ const { GET } = await import('./route');
 const d = new Date('2026-10-10T12:00:00Z');
 
 beforeEach(() => {
-  user = { id: 'u1' };
+  user = { id: 'u1', app_metadata: { plinth_access: true } };
   rows = [];
 });
 
@@ -46,6 +46,11 @@ describe('GET /api/captaciones/metricas', () => {
 
   it('exige sesión', async () => {
     user = null;
+    expect((await GET()).status).toBe(401);
+  });
+
+  it('exige la marca de acceso, no solo una sesión', async () => {
+    user = { id: 'intruso' };
     expect((await GET()).status).toBe(401);
   });
 });

@@ -131,9 +131,9 @@ export async function extractInteraction(input: ExtractionInput): Promise<Extrac
   let lastError: unknown;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      const res = await fetch(`${GEMINI_ENDPOINT}?key=${GEMINI_API_KEY}`, {
+      const res = await fetch(GEMINI_ENDPOINT, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY! },
         body: JSON.stringify({
           contents: [{ parts }],
           generationConfig: {

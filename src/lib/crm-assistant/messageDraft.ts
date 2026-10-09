@@ -40,9 +40,9 @@ Resumen de la última interacción: ${ctx.summary}
 Devolvé SOLO el texto del mensaje, sin comillas ni texto adicional.`;
 
   try {
-    const res = await fetch(`${GEMINI_ENDPOINT}?key=${GEMINI_API_KEY}`, {
+    const res = await fetch(GEMINI_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY! },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { temperature: 0.4, maxOutputTokens: 200 },

@@ -39,9 +39,9 @@ ${listStr}
 Devolvé SOLO un JSON array de ${listings.length} strings, cada uno "dueno-directo", "inmobiliaria" o "desconocido", en el mismo orden. Sin texto adicional.`;
 
   try {
-    const res = await fetch(`${GEMINI_ENDPOINT}?key=${GEMINI_API_KEY}`, {
+    const res = await fetch(GEMINI_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY! },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {

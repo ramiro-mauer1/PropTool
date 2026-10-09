@@ -23,6 +23,14 @@ model AllowedEmail {
   addedAt DateTime @default(now())
 }
 
+// Fixed-window counters for rate limiting (login attempts, paid API calls).
+// Written only through raw SQL in src/lib/security/rateLimit.ts.
+model RateLimit {
+  key         String   @id
+  windowStart DateTime
+  count       Int
+}
+
 // ─── CRM Assistant ──────────────────────────────────────────────────────────
 // Data model for the "asistente con IA" feature: an agent describes an
 // interaction with a client in natural language, Gemini extracts structured

@@ -218,9 +218,9 @@ Respondé SOLO con JSON: {"variantes":[{"angulo":"<id>","mensaje":"<texto>"}]}`;
 async function llamarGemini(prompt: string): Promise<{ angulo: string; mensaje: string }[] | null> {
   if (!GEMINI_API_KEY) return null;
   try {
-    const res = await fetch(`${GEMINI_ENDPOINT}?key=${GEMINI_API_KEY}`, {
+    const res = await fetch(GEMINI_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY! },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { temperature: 0.85, maxOutputTokens: 8192, responseMimeType: 'application/json' },

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/auth/requireUser';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -17,10 +17,8 @@ export interface MetricaAngulo {
 // se borran), no el estado actual, para no perder las que después se
 // descartaron o retrocedieron.
 export async function GET() {
-  const {
-    data: { user },
-  } = await createClient().auth.getUser();
-  if (!user) return NextResponse.json({ error: 'No autorizado.' }, { status: 401 });
+  const auth = await requireUser();
+  if (auth.response) return auth.response;
 
   const rows = await prisma.captacion.findMany({
     where: { anguloEnviado: { not: null } },

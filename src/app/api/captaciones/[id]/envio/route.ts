@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/auth/requireUser';
 import { ANGULO_IDS } from '@/lib/captaciones/mensaje/angulos';
 
 export const dynamic = 'force-dynamic';
@@ -13,11 +13,10 @@ const ANGULOS_VALIDOS: string[] = [...ANGULO_IDS, 'borrador'];
 // POST { angulo, mensaje }: registra qué se le mandó al dueño, para medir qué
 // ángulo responde mejor. Se llama al tocar "Copiar" o "Enviar por WhatsApp";
 // gana el último envío.
-export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const {
-    data: { user },
-  } = await createClient().auth.getUser();
-  if (!user) return NextResponse.json({ error: 'No autorizado.' }, { status: 401 });
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireUser();
+  if (auth.response) return auth.response;
+  const { id } = await params;
 
   let body: { angulo?: unknown; mensaje?: unknown };
   try {
@@ -33,7 +32,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (!mensaje) return NextResponse.json({ error: 'Falta mensaje.' }, { status: 400 });
 
   const result = await prisma.captacion.updateMany({
-    where: { id: params.id },
+    where: { id: id },
     data: { anguloEnviado: body.angulo, mensajeEnviado: mensaje, enviadoEn: new Date() },
   });
   if (result.count === 0) return NextResponse.json({ error: 'Captación no encontrada.' }, { status: 404 });

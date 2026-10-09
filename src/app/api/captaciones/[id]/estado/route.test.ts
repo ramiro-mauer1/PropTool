@@ -58,7 +58,7 @@ function buildFakePrisma() {
 vi.mock('@/lib/db', () => ({ prisma: buildFakePrisma() }));
 vi.mock('@/lib/supabase/server', () => ({
   createClient: () => ({
-    auth: { getUser: async () => ({ data: { user: { id: 'u1', user_metadata: { full_name: 'Jota' } } } }) },
+    auth: { getUser: async () => ({ data: { user: { id: 'u1', app_metadata: { plinth_access: true }, user_metadata: { full_name: 'Jota' } } } }) },
   }),
 }));
 
@@ -71,7 +71,7 @@ function patch(body: unknown, id = 'cap-1') {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
-    { params: { id } }
+    { params: Promise.resolve({ id }) }
   );
 }
 

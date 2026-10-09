@@ -18,6 +18,11 @@ const geistMono = localFont({
   display: "swap",
 });
 
+// Rendered per request so Next.js can stamp the CSP nonce from middleware.ts
+// on its scripts — a statically prerendered page has no nonce and the CSP
+// would block it.
+export const dynamic = "force-dynamic";
+
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { requireUser } from '@/lib/auth/requireUser';
+import { enforceRateLimits } from '@/lib/security/rateLimit';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -11,11 +12,10 @@ export const runtime = 'nodejs';
  * en `AllowedEmail`, así que la persona puede volver a crearla más adelante.
  */
 export async function DELETE(req: Request) {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user || !user.email) {
+  const auth = await requireUser();
+  if (auth.response) return auth.response;
+  const { user, supabase } = auth;
+  if (!user.email) {
     return NextResponse.json({ error: 'No autenticado.' }, { status: 401 });
   }
 
@@ -29,6 +29,9 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: 'Ingresá tu contraseña.' }, { status: 400 });
   }
 
+  const limited = await enforceRateLimits([{ key: `password-check:${user.id}`, limit: 5, windowSeconds: 15 * 60 }]);
+  if (limited) return limited;
+
   const { error: verifyError } = await supabase.auth.signInWithPassword({ email: user.email, password });
   if (verifyError) {
     return NextResponse.json({ error: 'La contraseña no es correcta.' }, { status: 401 });
@@ -38,7 +41,8 @@ export async function DELETE(req: Request) {
   await admin.storage.from('avatars').remove([`${user.id}/avatar.jpg`]);
   const { error } = await admin.auth.admin.deleteUser(user.id);
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    console.error('[auth/account] deleteUser failed:', error.message);
+    return NextResponse.json({ error: 'No se pudo eliminar la cuenta. Probá de nuevo.' }, { status: 500 });
   }
 
   await supabase.auth.signOut();
