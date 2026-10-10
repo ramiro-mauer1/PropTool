@@ -143,39 +143,39 @@ export function BeforeAfterSlider({
   return (
     <div className="relative flex flex-col items-center w-full h-full max-w-full overflow-hidden select-none">
       {/* Barra de Controles Superior */}
-      <div className="flex items-center justify-between w-full max-w-4xl px-4 py-2 mb-2 rounded-xl bg-surface/90 border border-border backdrop-blur-md shadow-lg shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-sm text-foreground truncate max-w-[240px]">
-              {title}
-            </span>
-            <span className="text-2xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              Alta Definición
-            </span>
-          </div>
+      <div className="flex items-center justify-between gap-2 w-full max-w-4xl px-2.5 sm:px-4 py-2 mb-2 rounded-xl bg-surface/90 border border-border backdrop-blur-md shadow-lg shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-medium text-xs sm:text-sm text-foreground truncate">
+            {title}
+          </span>
+          <span className="hidden md:inline-block shrink-0 text-2xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            Alta Definición
+          </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Controles de Zoom */}
-          <div className="flex items-center gap-1 bg-surface-raised/80 border border-border rounded-lg p-0.5">
+          <div className="flex items-center gap-0.5 sm:gap-1 bg-surface-raised/80 border border-border rounded-lg p-0.5">
             <button
               type="button"
               onClick={handleZoomOut}
               disabled={zoomLevel <= 1}
-              className="p-1.5 rounded text-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center justify-center w-8 h-8 sm:w-auto sm:h-auto sm:p-1.5 rounded text-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               title="Alejar"
+              aria-label="Alejar"
             >
               <ZoomOut className="w-3.5 h-3.5" />
             </button>
-            <span className="text-2xs font-mono font-medium px-1.5 text-zinc-300 min-w-[36px] text-center">
+            <span className="text-2xs font-mono font-medium px-0.5 sm:px-1.5 text-zinc-300 min-w-[32px] sm:min-w-[36px] text-center tabular-nums">
               {zoomLevel.toFixed(1)}x
             </span>
             <button
               type="button"
               onClick={handleZoomIn}
               disabled={zoomLevel >= 4}
-              className="p-1.5 rounded text-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center justify-center w-8 h-8 sm:w-auto sm:h-auto sm:p-1.5 rounded text-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               title="Acercar"
+              aria-label="Acercar"
             >
               <ZoomIn className="w-3.5 h-3.5" />
             </button>
@@ -183,8 +183,9 @@ export function BeforeAfterSlider({
               <button
                 type="button"
                 onClick={handleResetZoom}
-                className="p-1.5 rounded text-muted hover:text-accent transition-colors"
+                className="flex items-center justify-center w-8 h-8 sm:w-auto sm:h-auto sm:p-1.5 rounded text-muted hover:text-accent transition-colors"
                 title="Restablecer zoom"
+                aria-label="Restablecer zoom"
               >
                 <Maximize2 className="w-3.5 h-3.5" />
               </button>
@@ -195,11 +196,12 @@ export function BeforeAfterSlider({
             <button
               type="button"
               onClick={onDownload}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-500 text-zinc-950 text-xs font-semibold hover:bg-emerald-400 transition-all duration-150 active:scale-95 shadow-sm"
+              className="flex items-center justify-center gap-1.5 h-8 w-9 sm:w-auto sm:px-3.5 rounded-lg bg-emerald-500 text-zinc-950 text-xs font-semibold hover:bg-emerald-400 transition-all duration-150 active:scale-95 shadow-sm"
               title="Descargar imagen"
+              aria-label="Descargar imagen"
             >
-              <Download className="w-3.5 h-3.5" />
-              <span>Descargar</span>
+              <Download className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden sm:inline">Descargar</span>
             </button>
           )}
         </div>
@@ -209,7 +211,7 @@ export function BeforeAfterSlider({
       <div
         ref={containerRef}
         onMouseDown={handleContainerMouseDown}
-        className={`relative w-full flex-1 max-w-4xl max-h-[calc(100vh-230px)] rounded-2xl overflow-hidden border border-border bg-surface shadow-2xl ${
+        className={`relative w-full flex-1 min-h-0 max-w-4xl rounded-2xl overflow-hidden border border-border bg-surface shadow-2xl ${
           zoomLevel > 1 ? (isPanning ? "cursor-grabbing" : "cursor-grab") : ""
         }`}
       >
@@ -286,7 +288,7 @@ export function BeforeAfterSlider({
             <div
               onMouseDown={onMouseDownSlider}
               onTouchStart={onTouchStartSlider}
-              className="absolute w-10 h-10 rounded-full bg-white text-zinc-950 shadow-2xl flex items-center justify-center cursor-ew-resize hover:scale-110 active:scale-95 transition-transform duration-150 ring-4 ring-black/40"
+              className="absolute w-11 h-11 sm:w-10 sm:h-10 rounded-full bg-white text-zinc-950 shadow-2xl flex items-center justify-center cursor-ew-resize touch-none hover:scale-110 active:scale-95 transition-transform duration-150 ring-4 ring-black/40"
               title="Arrastra para comparar Antes y Después"
             >
               <ArrowLeftRight className="w-4 h-4 text-zinc-900" />

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import JSZip from "jszip";
+import { downloadResult, toExportBlob } from "@/lib/settings";
 import type {
   EnhanceQueueItem,
   EnhanceStatus,
@@ -442,7 +443,7 @@ export function useEnhanceQueue(options?: UseEnhanceQueueOptions) {
   }, [cancelActiveTask, terminateWorker]);
 
   /**
-   * Descarga una imagen individual procesada en formato PNG sin pérdidas.
+   * Descarga una imagen individual en el formato de exportación elegido en Configuración.
    */
   const downloadSingle = useCallback(
     (id: string) => {
@@ -450,19 +451,14 @@ export function useEnhanceQueue(options?: UseEnhanceQueueOptions) {
       if (!item || !item.upscaledUrl) return;
 
       const baseName = item.name.replace(/\.[^/.]+$/, "");
-      const suffix = item.isOptimized2K ? "_2k_super_res.png" : "_x4_super_res.png";
-      const a = document.createElement("a");
-      a.href = item.upscaledUrl;
-      a.download = `${baseName}${suffix}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      const suffix = item.isOptimized2K ? "_2k_super_res" : "_x4_super_res";
+      void downloadResult(item.upscaledBlob ?? item.upscaledUrl, `${baseName}${suffix}`);
     },
     [queue]
   );
 
   /**
-   * Empaqueta todas las imágenes completadas en un archivo ZIP sin pérdidas
+   * Empaqueta todas las imágenes completadas (en el formato de exportación elegido) en un ZIP
    * mediante JSZip y desencadena la descarga directa en el navegador.
    */
   const downloadAllZip = useCallback(async () => {
@@ -483,9 +479,9 @@ export function useEnhanceQueue(options?: UseEnhanceQueueOptions) {
       for (let i = 0; i < completedItems.length; i++) {
         const item = completedItems[i];
         const baseName = item.name.replace(/\.[^/.]+$/, "");
-        const suffix = item.isOptimized2K ? "_2k_super_res.png" : "_x4_super_res.png";
-        const fileName = `${baseName}${suffix}`;
-        zip.file(fileName, item.upscaledBlob!);
+        const suffix = item.isOptimized2K ? "_2k_super_res" : "_x4_super_res";
+        const { blob, ext } = await toExportBlob(item.upscaledBlob!);
+        zip.file(`${baseName}${suffix}.${ext}`, blob);
       }
 
       const zipBlob = await zip.generateAsync({

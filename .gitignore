@@ -25,11 +25,15 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# local env files
-.env*.local
+# local env files (incl. backups like .env.bak-*, .env.local.bak-*)
+.env*
+!.env.example
 
 # vercel
 .vercel
+
+# supabase CLI local state
+supabase/.temp
 
 # typescript
 *.tsbuildinfo
@@ -38,3 +42,11 @@ next-env.d.ts
 # onnx models
 public/models/*.onnx
 
+
+# local data samples & tooling
+# Owners' names and phones: real listing data and screenshots never go to git.
+plinth_muestra_captaciones.json
+captaciones_*.json
+capturas-captaciones/
+/.claude/
+/.impeccable/

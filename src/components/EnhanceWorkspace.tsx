@@ -15,9 +15,10 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowRight,
+  MoreHorizontal,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Dropzone } from "@/components/Dropzone";
+import { StudioDropzone } from "@/components/StudioDropzone";
 import { BeforeAfterSlider } from "@/components/BeforeAfterSlider";
 import { useEnhanceQueue, MAX_QUEUE_SIZE } from "@/hooks/useEnhanceQueue";
 import { useToast } from "@/components/Toast";
@@ -38,6 +39,8 @@ export function EnhanceWorkspace({
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
+  // Acciones secundarias plegadas en un menú cuando no entran en la barra
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const fallbackQueue = useEnhanceQueue({
     onError: (err) => {
@@ -147,59 +150,34 @@ export function EnhanceWorkspace({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.98 }}
             transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
-            className="flex-1 flex flex-col items-center justify-center p-6"
+            className="flex-1 flex flex-col overflow-hidden"
           >
-            {/* Botón para volver al inicio */}
-            {onBack && (
-              <div className="w-full max-w-4xl mb-6 flex items-center justify-start">
-                <button
-                  type="button"
-                  onClick={onBack}
-                  className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface hover:bg-surface-raised border border-border text-xs font-medium text-muted hover:text-foreground transition-all duration-200 btn-tactile shadow-subtle group"
-                >
-                  <ChevronLeft className="w-4 h-4 text-muted group-hover:text-foreground group-hover:-translate-x-0.5 transition-all" />
-                  <span>Volver al inicio</span>
-                </button>
-              </div>
-            )}
-
-            {/* Banner contextual de importación */}
-            {availableCleanCount > 0 && onOpenImportModal && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-6 flex items-center justify-between gap-4 p-3.5 rounded-card bg-surface/90 border border-accent/30 max-w-lg w-full shadow-subtle backdrop-blur-md"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-accent/15 flex items-center justify-center text-accent">
-                    <Sparkles className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-foreground">
-                      {availableCleanCount} {availableCleanCount === 1 ? "fotografía limpia lista" : "fotografías limpias listas"}
-                    </p>
-                    <p className="text-2xs text-muted">
-                      Puedes aumentar su resolución a 4K con IA
-                    </p>
-                  </div>
+            <StudioDropzone
+              onFilesSelected={handleFilesAdded}
+              title="Mejora de Fotos"
+              subtitle="Recuperá nitidez y detalle en fotos chicas o comprimidas, listas para publicar."
+              dropLabel="Arrastrá las fotos a mejorar"
+              mobileDropLabel="Elegí las fotos a mejorar"
+              hint={`Hasta ${MAX_QUEUE_SIZE} fotos por lote.`}
+              ariaLabel="Elegir fotos para mejorar"
+            >
+              {availableCleanCount > 0 && onOpenImportModal && (
+                <div className="flex items-center justify-between gap-3 min-h-[56px] pl-4 pr-2 py-2 rounded-xl border border-white/[0.08] bg-[#0f1115]">
+                  <p className="text-sm text-[#c6cad1] min-w-0">
+                    <span className="font-medium text-white tabular-nums">{availableCleanCount}</span>{" "}
+                    {availableCleanCount === 1 ? "foto limpia lista" : "fotos limpias listas"} para mejorar
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onOpenImportModal}
+                    className="flex items-center gap-1.5 h-10 px-3.5 rounded-lg border border-white/[0.1] bg-white/[0.04] hover:bg-white/[0.08] text-sm font-medium text-white transition-colors active:scale-[0.98] shrink-0"
+                  >
+                    <span>Traerlas</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={onOpenImportModal}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-subtle bg-accent text-zinc-950 text-xs font-semibold hover:bg-accent-hover btn-tactile shadow-subtle shrink-0"
-                >
-                  <span>Importar</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </motion.div>
-            )}
-
-            <Dropzone
-              onFilesAdded={handleFilesAdded}
-              maxFiles={MAX_QUEUE_SIZE}
-              title="Aumentar resolución de fotografías"
-              subtitle={`Mejora de Fotos con IA para mejorar la definición a 4K. Máximo ${MAX_QUEUE_SIZE} fotos por lote.`}
-            />
+              )}
+            </StudioDropzone>
           </motion.div>
         ) : (
           <motion.div
@@ -208,35 +186,36 @@ export function EnhanceWorkspace({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
-            className="flex-1 flex flex-col px-4 sm:px-6 pt-3 pb-3 overflow-hidden gap-3"
+            className="flex-1 flex flex-col px-3 sm:px-6 pt-3 pb-3 overflow-hidden gap-3"
           >
             {/* Header de Acción Unificada */}
-            <div className="flex items-center justify-between shrink-0 glass-panel px-4 py-2.5 rounded-card">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between gap-2 shrink-0 glass-panel px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-card">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                 {onBack && (
                   <button
                     type="button"
                     onClick={onBack}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-subtle bg-surface hover:bg-surface-raised border border-border text-xs font-medium text-muted hover:text-foreground transition-colors btn-tactile group"
+                    className="flex items-center gap-1.5 h-9 sm:h-8 px-2.5 shrink-0 rounded-subtle bg-surface hover:bg-surface-raised border border-border text-xs font-medium text-muted hover:text-foreground transition-colors btn-tactile group"
                     title="Volver al inicio"
+                    aria-label="Volver al inicio"
                   >
                     <ChevronLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
-                    <span>Inicio</span>
+                    <span className="hidden sm:inline">Inicio</span>
                   </button>
                 )}
-                <div className="w-8 h-8 rounded-subtle bg-accent/15 border border-accent/25 flex items-center justify-center text-accent">
+                <div className="hidden sm:flex w-8 h-8 shrink-0 rounded-subtle bg-accent/15 border border-accent/25 items-center justify-center text-accent">
                   <Sparkles className="w-4 h-4" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                      Mejora de Fotos 4x
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h2 className="text-xs sm:text-sm font-semibold tracking-tight text-foreground truncate">
+                      Mejora de Fotos
                     </h2>
-                    <span className="text-2xs font-mono px-2 py-0.5 rounded-full bg-surface-raised border border-border text-muted tabular-nums">
+                    <span className="text-2xs font-mono px-2 py-0.5 shrink-0 rounded-full bg-surface-raised border border-border text-muted tabular-nums">
                       {queue.length}/{MAX_QUEUE_SIZE}
                     </span>
                   </div>
-                  <p className="text-2xs text-muted tabular-nums">
+                  <p className="text-2xs text-muted tabular-nums truncate">
                     {completedCount} mejorada{completedCount !== 1 ? "s" : ""} •{" "}
                     {queue.length - completedCount} pendiente{queue.length - completedCount !== 1 ? "s" : ""}
                   </p>
@@ -244,13 +223,13 @@ export function EnhanceWorkspace({
               </div>
 
               {/* Acciones de Barra Contextual */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 {availableCleanCount > 0 && queue.length < MAX_QUEUE_SIZE && onOpenImportModal && (
                   <button
                     type="button"
                     onClick={onOpenImportModal}
                     disabled={isProcessing}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-subtle bg-surface hover:bg-surface-raised border border-border text-xs font-medium text-foreground btn-tactile disabled:opacity-40"
+                    className="hidden lg:flex items-center gap-1.5 h-8 px-3 rounded-subtle bg-surface hover:bg-surface-raised border border-border text-xs font-medium text-foreground btn-tactile disabled:opacity-40"
                     title="Importar imágenes limpias del módulo anterior"
                   >
                     <Sparkles className="w-3.5 h-3.5 text-accent" />
@@ -263,7 +242,7 @@ export function EnhanceWorkspace({
                     type="button"
                     onClick={triggerUpload}
                     disabled={isProcessing}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-subtle bg-surface hover:bg-surface-raised border border-border text-xs font-medium text-foreground btn-tactile disabled:opacity-40"
+                    className="hidden lg:flex items-center gap-1.5 h-8 px-3 rounded-subtle bg-surface hover:bg-surface-raised border border-border text-xs font-medium text-foreground btn-tactile disabled:opacity-40"
                   >
                     <Upload className="w-3.5 h-3.5 text-muted" />
                     <span>Agregar</span>
@@ -274,9 +253,9 @@ export function EnhanceWorkspace({
                   <button
                     type="button"
                     onClick={cancelActiveTask}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-subtle bg-error/15 hover:bg-error/25 text-error border border-error/30 text-xs font-medium btn-tactile"
+                    className="flex items-center justify-center gap-1.5 h-9 sm:h-8 px-3 sm:px-3.5 rounded-subtle bg-error/15 hover:bg-error/25 text-error border border-error/30 text-xs font-medium btn-tactile"
                   >
-                    <StopCircle className="w-3.5 h-3.5" />
+                    <StopCircle className="w-3.5 h-3.5 shrink-0" />
                     <span>Detener</span>
                   </button>
                 ) : (
@@ -284,10 +263,11 @@ export function EnhanceWorkspace({
                     type="button"
                     onClick={startProcessing}
                     disabled={queue.every((i) => i.status === "completed")}
-                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-subtle bg-accent text-zinc-950 font-semibold text-xs hover:bg-accent-hover btn-tactile shadow-subtle disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="flex items-center justify-center gap-1.5 h-9 sm:h-8 px-3 sm:px-4 rounded-subtle bg-accent text-zinc-950 font-semibold text-xs hover:bg-accent-hover btn-tactile shadow-subtle disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Mejorar imágenes</span>
+                    <Play className="w-3.5 h-3.5 fill-current shrink-0" />
+                    <span className="hidden sm:inline">Mejorar imágenes</span>
+                    <span className="sm:hidden">Mejorar</span>
                   </button>
                 )}
 
@@ -295,7 +275,7 @@ export function EnhanceWorkspace({
                   <button
                     type="button"
                     onClick={downloadAllZip}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-subtle bg-success/15 hover:bg-success/25 text-success border border-success/30 text-xs font-semibold btn-tactile"
+                    className="hidden lg:flex items-center gap-1.5 h-8 px-3.5 rounded-subtle bg-success/15 hover:bg-success/25 text-success border border-success/30 text-xs font-semibold btn-tactile"
                     title="Descargar lote completo en archivo ZIP"
                   >
                     <Archive className="w-3.5 h-3.5" />
@@ -307,16 +287,113 @@ export function EnhanceWorkspace({
                   type="button"
                   onClick={clearQueue}
                   disabled={isProcessing}
-                  className="p-2 rounded-subtle text-muted hover:text-error hover:bg-surface border border-transparent hover:border-border btn-tactile disabled:opacity-40"
+                  className="hidden lg:flex items-center justify-center w-8 h-8 rounded-subtle text-muted hover:text-error hover:bg-surface border border-transparent hover:border-border btn-tactile disabled:opacity-40"
                   title="Vaciar cola"
+                  aria-label="Vaciar cola"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
+
+                {/* ── Menú de acciones secundarias (móvil / tablet) ───────── */}
+                <div className="relative lg:hidden">
+                  <button
+                    type="button"
+                    onClick={() => setMenuOpen((v) => !v)}
+                    aria-haspopup="menu"
+                    aria-expanded={menuOpen}
+                    aria-label="Más acciones"
+                    className="flex items-center justify-center w-10 h-9 sm:w-9 sm:h-8 rounded-subtle bg-surface hover:bg-surface-raised border border-border text-secondary btn-tactile"
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </button>
+
+                  <AnimatePresence>
+                    {menuOpen && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-[60]"
+                          onClick={() => setMenuOpen(false)}
+                        />
+                        <motion.div
+                          role="menu"
+                          initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                          transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+                          className="absolute right-0 top-full mt-2 w-60 max-w-[calc(100vw-1.5rem)] z-[70] origin-top-right rounded-xl border border-border bg-surface-overlay shadow-2xl overflow-hidden p-1.5"
+                        >
+                          {availableCleanCount > 0 && queue.length < MAX_QUEUE_SIZE && onOpenImportModal && (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => {
+                                setMenuOpen(false);
+                                onOpenImportModal();
+                              }}
+                              disabled={isProcessing}
+                              className="w-full flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium text-foreground hover:bg-surface-raised transition-colors disabled:opacity-40 text-left"
+                            >
+                              <Sparkles className="w-4 h-4 shrink-0 text-accent" />
+                              <span className="truncate">Importar ({availableCleanCount})</span>
+                            </button>
+                          )}
+
+                          {queue.length < MAX_QUEUE_SIZE && (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => {
+                                setMenuOpen(false);
+                                triggerUpload();
+                              }}
+                              disabled={isProcessing}
+                              className="w-full flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium text-foreground hover:bg-surface-raised transition-colors disabled:opacity-40 text-left"
+                            >
+                              <Upload className="w-4 h-4 shrink-0 text-muted" />
+                              <span>Agregar fotos</span>
+                            </button>
+                          )}
+
+                          {completedCount > 0 && (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => {
+                                setMenuOpen(false);
+                                downloadAllZip();
+                              }}
+                              className="w-full flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-semibold text-success hover:bg-success/10 transition-colors text-left"
+                            >
+                              <Archive className="w-4 h-4 shrink-0" />
+                              <span>Descargar (.zip)</span>
+                            </button>
+                          )}
+
+                          <div className="my-1 h-px bg-border" />
+
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setMenuOpen(false);
+                              clearQueue();
+                            }}
+                            disabled={isProcessing}
+                            className="w-full flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-medium text-error hover:bg-error/10 transition-colors disabled:opacity-40 text-left"
+                          >
+                            <Trash2 className="w-4 h-4 shrink-0" />
+                            <span>Vaciar cola</span>
+                          </button>
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
             </div>
 
             {/* Strip Horizontal de Miniaturas */}
-            <div className="flex items-center gap-2 overflow-x-auto py-1 shrink-0 scrollbar-thin">
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-touch py-1 shrink-0">
               {queue.map((item, idx) => {
                 const isSelected = idx === selectedIndex;
                 const isCurrentlyProcessing = item.status === "processing";
@@ -325,7 +402,7 @@ export function EnhanceWorkspace({
                   <div
                     key={item.id}
                     onClick={() => setSelectedIndex(idx)}
-                    className={`relative flex items-center gap-2.5 p-2 rounded-card border cursor-pointer select-none min-w-[210px] max-w-[260px] shrink-0 btn-tactile ${
+                    className={`relative flex items-center gap-2.5 p-2 rounded-card border cursor-pointer select-none min-w-[175px] sm:min-w-[210px] max-w-[260px] shrink-0 btn-tactile ${
                       isSelected
                         ? "bg-surface-raised border-accent shadow-glow"
                         : "bg-surface/80 hover:bg-surface border-border/80"

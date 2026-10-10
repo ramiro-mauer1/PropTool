@@ -1,81 +1,85 @@
 import { Tensor } from "onnxruntime-web";
 import type { TileCoordinates } from "@/types/enhance";
 
-export const TILE_SIZE = 256;
+// 384 en vez de 256: más contexto por tile para el modelo (menos halos en
+// bordes de alto contraste, ver ramas/cielo). ~2.25x más pesado por tile,
+// pero el piso de hardware objetivo (M1, desktop, iPhone 16+) lo soporta
+// con margen — si se necesita soportar equipos más débiles, bajar acá.
+export const TILE_SIZE = 384;
 export const TILE_OVERLAP = 32;
 export const SCALE_FACTOR = 4;
 export const OUTPUT_TILE_SIZE = TILE_SIZE * SCALE_FACTOR; // 1024
 export const OUTPUT_OVERLAP = TILE_OVERLAP * SCALE_FACTOR; // 128
 
-/** Límite superior para 2K Web Ready (fotografía inmobiliaria y web) */
+/** Límite superior de entrega — "2K Web Ready" (fotografía inmobiliaria y web) */
 export const MAX_OUTPUT_DIMENSION = 2048;
+
+// Tope de resolución que efectivamente ve el modelo antes del 4x. Antes se
+// derivaba de MAX_OUTPUT_DIMENSION/4 (~512px), lo que aplastaba cualquier
+// foto de celular a 512px y le pedía a la GAN inventar el resto — la causa
+// principal del look "plástico"/AI slop. 1024px (~4x más cómputo de tiles)
+// preserva mucho más detalle real para que el modelo lo refine en vez de
+// alucinarlo. Si hace falta soportar hardware más débil, bajar acá.
+export const MAX_MODEL_INPUT_DIMENSION = 1024;
 
 export interface ScaledDimensions {
   originalWidth: number;
   originalHeight: number;
+  /** Resolución real que se le da a tilear/inferir al modelo. */
   inputWidth: number;
   inputHeight: number;
+  /** Resultado crudo del modelo (inputWidth/Height * 4), antes de cualquier downscale final. */
+  aiWidth: number;
+  aiHeight: number;
+  /** Resolución final entregada al usuario. */
   targetWidth: number;
   targetHeight: number;
+  /** true si el resultado del modelo se downscalea al final para entrar en MAX_OUTPUT_DIMENSION. */
   isCapped: boolean;
 }
 
 /**
- * Calcula las dimensiones óptimas para la imagen aplicando un tope inteligente
- * de resolución a 2K (máximo 2048 px en el lado mayor final).
- * Si la imagen escalada a 4x superaría los 2048 px, pre-escala adaptativamente
- * la entrada a exactamente (target / 4) para que la inferencia fija 4x produzca
- * exactamente la resolución 2K con altísima nitidez y en muy pocos tiles (2-4).
+ * Calcula las dimensiones del pipeline en dos pasos independientes:
+ *
+ * 1. Cuánta resolución real se le da al modelo (tope MAX_MODEL_INPUT_DIMENSION
+ *    en el lado mayor, sin achicar si la imagen ya es más chica que eso).
+ * 2. Si el 4x resultante supera el tope de entrega (MAX_OUTPUT_DIMENSION),
+ *    se reduce ese resultado — que ya es detalle real generado por la IA,
+ *    no una alucinación desde una fuente borrosa — mediante un downscale
+ *    de alta calidad al final del pipeline.
  */
 export function calculateAdaptiveDimensions(
   width: number,
   height: number,
-  maxOutputDim: number = MAX_OUTPUT_DIMENSION
+  maxOutputDim: number = MAX_OUTPUT_DIMENSION,
+  maxModelInputDim: number = MAX_MODEL_INPUT_DIMENSION
 ): ScaledDimensions {
-  const rawTargetW = width * SCALE_FACTOR;
-  const rawTargetH = height * SCALE_FACTOR;
-  const maxRaw = Math.max(rawTargetW, rawTargetH);
+  const longSide = Math.max(width, height);
+  const inputScale = longSide > maxModelInputDim ? maxModelInputDim / longSide : 1;
 
-  if (maxRaw <= maxOutputDim) {
-    return {
-      originalWidth: width,
-      originalHeight: height,
-      inputWidth: width,
-      inputHeight: height,
-      targetWidth: rawTargetW,
-      targetHeight: rawTargetH,
-      isCapped: false,
-    };
-  }
+  const inputWidth = Math.max(1, Math.round(width * inputScale));
+  const inputHeight = Math.max(1, Math.round(height * inputScale));
 
-  // Tope a maxOutputDim (2048 px) preservando aspecto
-  let finalW: number;
-  let finalH: number;
+  const aiWidth = inputWidth * SCALE_FACTOR;
+  const aiHeight = inputHeight * SCALE_FACTOR;
+  const aiLongSide = Math.max(aiWidth, aiHeight);
 
-  if (width >= height) {
-    finalW = maxOutputDim;
-    finalH = Math.round((height * maxOutputDim) / width);
-  } else {
-    finalH = maxOutputDim;
-    finalW = Math.round((width * maxOutputDim) / height);
-  }
+  const isCapped = aiLongSide > maxOutputDim;
+  const outputScale = isCapped ? maxOutputDim / aiLongSide : 1;
 
-  // La entrada al modelo debe ser exactamente 1/4 del objetivo
-  const inputWidth = Math.max(1, Math.round(finalW / SCALE_FACTOR));
-  const inputHeight = Math.max(1, Math.round(finalH / SCALE_FACTOR));
-
-  // El lienzo de salida final 4x del modelo
-  const targetWidth = inputWidth * SCALE_FACTOR;
-  const targetHeight = inputHeight * SCALE_FACTOR;
+  const targetWidth = Math.max(1, Math.round(aiWidth * outputScale));
+  const targetHeight = Math.max(1, Math.round(aiHeight * outputScale));
 
   return {
     originalWidth: width,
     originalHeight: height,
     inputWidth,
     inputHeight,
+    aiWidth,
+    aiHeight,
     targetWidth,
     targetHeight,
-    isCapped: true,
+    isCapped,
   };
 }
 
@@ -232,6 +236,20 @@ export function createTileTensor(imageData: ImageData): Tensor {
   return new Tensor("float32", floatData, [1, 3, imageData.height, imageData.width]);
 }
 
+// El modelo (entrenado para eliminar ruido/artefactos JPEG) aplasta a negro
+// puro buena parte del detalle sutil de sombras — un comportamiento aprendido
+// del modelo, no de este pipeline. Este levantamiento sube apenas los tonos
+// casi negros para recuperar algo de esa textura, y se apaga por completo
+// antes de tocar medios tonos o luces.
+const SHADOW_LIFT_MAX = 0.05;
+const SHADOW_LIFT_RANGE = 0.16;
+
+function shadowLiftAmount(luma: number): number {
+  if (luma >= SHADOW_LIFT_RANGE) return 0;
+  const t = 1.0 - luma / SHADOW_LIFT_RANGE;
+  return SHADOW_LIFT_MAX * t * t;
+}
+
 /**
  * Acumulador en punto flotante para la recomposición de alta precisión 4x.
  * Administra los canales R, G, B y el acumulador de peso por pixel para
@@ -327,10 +345,13 @@ export class UpscaleAccumulator {
       const g = Math.max(0.0, Math.min(1.0, this.accumG[i] * norm));
       const b = Math.max(0.0, Math.min(1.0, this.accumB[i] * norm));
 
+      const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+      const lift = shadowLiftAmount(luma);
+
       const px4 = i * 4;
-      rgba[px4] = Math.round(r * 255.0);
-      rgba[px4 + 1] = Math.round(g * 255.0);
-      rgba[px4 + 2] = Math.round(b * 255.0);
+      rgba[px4] = Math.round(Math.min(1.0, r + lift) * 255.0);
+      rgba[px4 + 1] = Math.round(Math.min(1.0, g + lift) * 255.0);
+      rgba[px4 + 2] = Math.round(Math.min(1.0, b + lift) * 255.0);
       rgba[px4 + 3] = 255; // Alpha completamente opaco
     }
 

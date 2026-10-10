@@ -82,7 +82,7 @@ export function SendToEnhanceModal({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4">
         {/* Fondo oscuro traslúcido con desenfoque */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -98,15 +98,15 @@ export function SendToEnhanceModal({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 8 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
-          className="relative w-full max-w-lg bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] z-10"
+          className="relative w-full max-w-lg bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88dvh] sm:max-h-[85dvh] mb-[env(safe-area-inset-bottom,0px)] sm:mb-0 z-10"
         >
           {/* Cabecera */}
-          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-accent/15 border border-accent/25 flex items-center justify-center text-accent">
+          <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-border flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 shrink-0 rounded-lg bg-accent/15 border border-accent/25 flex items-center justify-center text-accent">
                 <Sparkles className="w-4 h-4" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <h3 className="text-sm font-semibold text-foreground">
                   Mejorar resolución
                 </h3>
@@ -119,7 +119,7 @@ export function SendToEnhanceModal({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-surface-raised transition-colors"
+              className="shrink-0 flex items-center justify-center w-9 h-9 -mr-1.5 -mt-1 rounded-lg text-muted hover:text-foreground hover:bg-surface-raised transition-colors"
               aria-label="Cerrar"
             >
               <X className="w-4 h-4" />
@@ -127,7 +127,7 @@ export function SendToEnhanceModal({
           </div>
 
           {/* Sub-barra de acciones rápidas */}
-          <div className="px-5 py-2.5 bg-surface-raised/40 border-b border-border flex items-center justify-between text-xs">
+          <div className="px-4 sm:px-5 py-2.5 bg-surface-raised/40 border-b border-border flex flex-col xs:flex-row xs:items-center xs:justify-between gap-1.5 text-xs">
             <span className="text-muted">
               {selectedIds.length} de {processedImages.length} seleccionadas{" "}
               <span className="text-muted/60 font-mono">(máx. {maxAllowed})</span>
@@ -155,7 +155,7 @@ export function SendToEnhanceModal({
           </div>
 
           {/* Lista de imágenes seleccionables */}
-          <div className="p-4 overflow-y-auto space-y-2 flex-1 scrollbar-thin">
+          <div className="p-3 sm:p-4 overflow-y-auto overscroll-contain space-y-2 flex-1">
             {processedImages.length === 0 ? (
               <div className="py-12 text-center text-muted text-xs">
                 No hay imágenes limpias disponibles para transferir.
@@ -216,11 +216,11 @@ export function SendToEnhanceModal({
           </div>
 
           {/* Pie de acción */}
-          <div className="px-5 py-3.5 border-t border-border bg-surface flex items-center justify-between">
+          <div className="px-4 sm:px-5 py-3 sm:py-3.5 border-t border-border bg-surface flex items-center justify-between gap-2 shrink-0">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg text-xs font-medium text-muted hover:text-foreground hover:bg-surface-raised transition-colors"
+              className="px-4 min-h-[40px] rounded-lg text-xs font-medium text-muted hover:text-foreground hover:bg-surface-raised transition-colors"
             >
               Cancelar
             </button>
@@ -229,10 +229,10 @@ export function SendToEnhanceModal({
               type="button"
               disabled={selectedIds.length === 0}
               onClick={handleConfirm}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-zinc-950 text-xs font-semibold transition-all duration-150 active:scale-95 shadow-sm hover:shadow-glow disabled:opacity-40 disabled:cursor-not-allowed"
+              className="inline-flex items-center justify-center gap-2 px-4 min-h-[40px] rounded-lg bg-accent hover:bg-accent-hover text-zinc-950 text-xs font-semibold transition-all duration-150 active:scale-95 shadow-sm hover:shadow-glow disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              <Sparkles className="w-3.5 h-3.5 fill-current" />
-              <span>
+              <Sparkles className="w-3.5 h-3.5 fill-current shrink-0" />
+              <span className="truncate">
                 Mejorar {selectedIds.length}{" "}
                 {selectedIds.length === 1 ? "imagen" : "imágenes"}
               </span>
