@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { ToastProvider } from "@/components/Toast";
 import { MotionLayoutGroup } from "@/components/MotionLayoutGroup";
+import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import "./globals.css";
 
 const geistSans = localFont({
@@ -36,8 +37,8 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: "Plinth - Real Estate OS",
-  description:
-    "Editor de imágenes profesional con IA para agentes inmobiliarios. Mejora, escala y transforma fotografías de propiedades al instante.",
+  applicationName: "Plinth",
+  description: "Captaciones de propietarios directos para inmobiliarias",
   keywords: [
     "inmobiliaria",
     "editor de imágenes",
@@ -47,6 +48,18 @@ export const metadata: Metadata = {
     "upscaler",
   ],
   authors: [{ name: "Plinth" }],
+  // iPhone ("Agregar a inicio"): abre sin las barras de Safari, con la barra
+  // de estado negra y "Plinth" como nombre bajo el ícono. El ícono sale de
+  // app/apple-icon.png y el manifest de app/manifest.ts.
+  appleWebApp: {
+    capable: true,
+    title: "Plinth",
+    // "black" y no "black-translucent": la app no reserva espacio arriba para
+    // la barra de estado (safe-area-inset-top), así el contenido no queda debajo.
+    statusBarStyle: "black",
+  },
+  // Next.js solo emite `mobile-web-app-capable`; iOS anteriores a 17 leen esta.
+  other: { "apple-mobile-web-app-capable": "yes" },
 };
 
 export default function RootLayout({
@@ -62,6 +75,7 @@ export default function RootLayout({
         <ToastProvider>
           <MotionLayoutGroup>{children}</MotionLayoutGroup>
         </ToastProvider>
+        <ServiceWorkerRegister />
       </body>
     </html>
   );

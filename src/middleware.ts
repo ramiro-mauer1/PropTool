@@ -123,7 +123,8 @@ export const config = {
   matcher: [
     // Every route except static assets, model weights, and the ONNX
     // runtime files served from /public — those load via plain <script>/
-    // fetch in the AI workers and must never redirect.
-    '/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|webp|onnx|wasm|mjs)$).*)',
+    // fetch in the AI workers and must never redirect. The PWA manifest and
+    // service worker are fetched without a session and must not redirect either.
+    '/((?!_next/static|_next/image|favicon\\.ico|manifest\\.webmanifest|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|webp|onnx|wasm|mjs)$).*)',
   ],
 };
