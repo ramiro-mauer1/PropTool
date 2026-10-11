@@ -4,10 +4,21 @@ import { hasAppAccess } from '@/lib/auth/access';
 
 // Public without a session: the root path itself (it renders the login view
 // client-side when unauthenticated — see LoginView/AppShell.tsx) and the auth
-// API used to actually establish a session. The two captaciones routes are
+// API used to establish a session or ask for access. The two captaciones routes are
 // called by the external search job: no session, they verify a bearer token
 // themselves. Keep them exact — the rest of /api/captaciones needs a session.
-const PUBLIC_API_PATHS = ['/api/auth/continue', '/api/auth/logout', '/api/captaciones/import', '/api/captaciones/estados'];
+const PUBLIC_API_PATHS = [
+  '/api/auth/continue',
+  '/api/auth/logout',
+  '/api/auth/request-access',
+  '/api/auth/accept-invite',
+  '/api/captaciones/import',
+  '/api/captaciones/estados',
+];
+
+// Pages that work without a session besides `/`: /acceso is where an
+// approved person sets their password from the emailed link.
+const PUBLIC_PAGES = ['/', '/acceso'];
 
 const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
 
@@ -94,7 +105,7 @@ export async function middleware(request: NextRequest) {
   // A session without the access flag (e.g. a sign-up made straight against
   // Supabase, bypassing the allowlist) counts as no session at all.
   const authorized = !!user && hasAppAccess(user);
-  const isPublic = pathname === '/' || PUBLIC_API_PATHS.includes(pathname);
+  const isPublic = PUBLIC_PAGES.includes(pathname) || PUBLIC_API_PATHS.includes(pathname);
 
   if (!authorized && !isPublic) {
     if (isApi) return NextResponse.json({ error: 'No autorizado.' }, { status: 401 });

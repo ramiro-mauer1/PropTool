@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Download, KeyRound, Loader2, LogOut, Palette, ShieldCheck, User, X } from 'lucide-react';
+import { Download, KeyRound, Loader2, LogOut, Palette, ShieldCheck, User, UserPlus, X } from 'lucide-react';
 import { signOutAndLeave } from '@/lib/supabase/signOut';
 import { cn } from '@/lib/utils';
 import type { AuthUser } from '@/hooks/useAuthUser';
@@ -12,6 +12,7 @@ import { SecuritySection } from './SecuritySection';
 import { AppearanceSection } from './AppearanceSection';
 import { ExportSection } from './ExportSection';
 import { PrivacySection } from './PrivacySection';
+import { AccessSection } from './AccessSection';
 
 interface SettingsModalProps {
   user: AuthUser;
@@ -26,6 +27,7 @@ const TABS = [
   { id: 'appearance', label: 'Apariencia', icon: Palette },
   { id: 'export', label: 'Exportación', icon: Download },
   { id: 'privacy', label: 'Privacidad', icon: ShieldCheck },
+  { id: 'access', label: 'Accesos', icon: UserPlus, ownerOnly: true },
 ] as const;
 
 type TabId = (typeof TABS)[number]['id'];
@@ -97,7 +99,7 @@ export function SettingsModal({ user, isOpen, onClose, onSaved }: SettingsModalP
                 aria-label="Secciones de configuración"
                 className="shrink-0 flex sm:flex-col gap-1 overflow-x-auto sm:overflow-visible border-b sm:border-b-0 sm:border-r border-border p-2 sm:w-44"
               >
-                {TABS.map(({ id, label, icon: Icon }) => (
+                {TABS.filter((t) => !('ownerOnly' in t) || user.isOwner).map(({ id, label, icon: Icon }) => (
                   <button
                     key={id}
                     type="button"
@@ -131,6 +133,7 @@ export function SettingsModal({ user, isOpen, onClose, onSaved }: SettingsModalP
                 {tab === 'appearance' && <AppearanceSection />}
                 {tab === 'export' && <ExportSection />}
                 {tab === 'privacy' && <PrivacySection />}
+                {tab === 'access' && user.isOwner && <AccessSection />}
               </div>
             </div>
           </motion.div>

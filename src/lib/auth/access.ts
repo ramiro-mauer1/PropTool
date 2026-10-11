@@ -13,3 +13,13 @@ export const ACCESS_FLAG = 'plinth_access';
 export function hasAppAccess(user: { app_metadata?: Record<string, unknown> } | null | undefined): boolean {
   return user?.app_metadata?.[ACCESS_FLAG] === true;
 }
+
+/**
+ * Whether the user may approve access requests. Also app_metadata, so only
+ * the service role can grant it (set by hand in Supabase for the owner).
+ */
+export const OWNER_FLAG = 'plinth_owner';
+
+export function isAppOwner(user: { app_metadata?: Record<string, unknown> } | null | undefined): boolean {
+  return hasAppAccess(user) && user?.app_metadata?.[OWNER_FLAG] === true;
+}

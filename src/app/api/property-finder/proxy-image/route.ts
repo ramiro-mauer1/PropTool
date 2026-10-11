@@ -1,4 +1,5 @@
 import { type NextRequest } from 'next/server';
+import { requireUser } from '@/lib/auth/requireUser';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -42,6 +43,9 @@ function isAllowedUrl(u: URL): boolean {
 }
 
 export async function GET(request: NextRequest): Promise<Response> {
+  const auth = await requireUser();
+  if (auth.response) return auth.response;
+
   const raw = request.nextUrl.searchParams.get('url');
   if (!raw) return new Response('Missing url parameter', { status: 400 });
 

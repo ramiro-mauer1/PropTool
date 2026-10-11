@@ -95,8 +95,11 @@ export async function PATCH(req: Request) {
   if (avatarUrl) {
     // Only accept URLs pointing at this user's own folder in the public
     // `avatars` bucket — never an arbitrary external image.
-    const expectedPrefix = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/avatars/${user.id}/`;
-    if (!avatarUrl.startsWith(expectedPrefix)) {
+    // Exactly the file the client uploads, plus its cache-busting `?v=`: a
+    // prefix check alone would let `../<other id>/` through.
+    const expected = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/avatars/${user.id}/avatar.jpg`;
+    const [base, query = ''] = avatarUrl.split('?', 2);
+    if (base !== expected || !/^(v=\d{1,16})?$/.test(query)) {
       return NextResponse.json({ error: 'URL de avatar inválida.' }, { status: 400 });
     }
   }

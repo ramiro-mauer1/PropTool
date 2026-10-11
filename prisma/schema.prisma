@@ -12,15 +12,36 @@ datasource db {
 }
 
 // ─── Auth ───────────────────────────────────────────────────────────────────
-// Invite-only allowlist: Supabase Auth handles credentials/sessions, but
-// account creation (in /api/auth/continue) only succeeds for an email the
-// owner has added here first. Managed directly in Supabase Studio's table
-// editor for now — no in-app admin UI yet.
+// Invite-only allowlist: Supabase Auth handles credentials/sessions, and an
+// email here is what grants access (a trigger keeps the account's
+// app_metadata.plinth_access flag in sync). The owner adds emails by
+// approving an AccessRequest in the app; Supabase Studio still works too.
 
 model AllowedEmail {
   id      String   @id @default(cuid())
   email   String   @unique
   addedAt DateTime @default(now())
+}
+
+enum AccessRequestEstado {
+  pendiente
+  aprobada
+  rechazada
+}
+
+// "Solicitar acceso" from the login screen. Nobody gets an account from the
+// login form: the owner approves the request and the app emails an invite
+// link, so only whoever controls the inbox can set the password.
+model AccessRequest {
+  id          String              @id @default(cuid())
+  email       String              @unique
+  nombre      String?
+  estado      AccessRequestEstado @default(pendiente)
+  creadaEn    DateTime            @default(now())
+  decididaEn  DateTime?
+  decididaPor String? // email of the owner who decided
+
+  @@index([estado, creadaEn])
 }
 
 // Fixed-window counters for rate limiting (login attempts, paid API calls).

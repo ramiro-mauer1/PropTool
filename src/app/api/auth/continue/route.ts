@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
-import { ACCESS_FLAG } from '@/lib/auth/access';
+import { hasAppAccess } from '@/lib/auth/access';
 import { clientIp, enforceRateLimits } from '@/lib/security/rateLimit';
-import { PWNED_PASSWORD_MSG, isPwnedPassword } from '@/lib/security/pwnedPassword';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -14,26 +12,21 @@ interface ContinueRequestBody {
   password: string;
 }
 
-// Same answer for "not allowlisted" and "wrong password", so the form can't
-// be used to find out which emails have access.
+// Same answer for "not allowlisted", "no account yet" and "wrong password",
+// so the form can't be used to find out which emails have access.
 const INVALID_CREDENTIALS =
-  'Email o contraseña incorrectos. Si es tu primera vez, pedile al administrador que autorice tu email.';
+  'Email o contraseña incorrectos. Si todavía no tenés cuenta, tocá "Solicitar acceso".';
 
-// Single form for both first login (signup) and every login after. Whether
-// it's a create-or-sign-in is decided server-side, never by the client:
-// 1. Email must be pre-authorized (AllowedEmail) — the owner adds it first.
-// 2. Try to create the Supabase Auth user. A brand-new email succeeds.
-// 3. An email that already has an account fails with "already registered" —
-//    fall through to a normal sign-in instead.
+// Sign-in only. Accounts are never created here: a new person asks for
+// access (/api/auth/request-access), the owner approves it, and the invite
+// link sets the password (/acceso). Creating the account on first login, as
+// before, let anyone who knew an allowlisted email claim it with their own
+// password.
 //
 // Signing in happens from this server, so Supabase's own per-IP limits see
 // Vercel's IP, not the attacker's: the limits below are the real brute-force
 // protection.
-//
-// No display name is collected here: it was only ever used on the very first
-// creation and ignored on every login after, so asking for it each time was
-// noise. New accounts fall back to the email as their label (see
-// useAuthUser.toAuthUser) until the agent sets a name in the profile modal.
+
 export async function POST(req: Request) {
   let body: ContinueRequestBody;
   try {
@@ -67,40 +60,15 @@ export async function POST(req: Request) {
   }
 
   const supabase = await createClient();
-  const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-  if (!signInError) return NextResponse.json({ ok: true });
-
-  // Sign-in failed: either a wrong password or an account that doesn't exist
-  // yet. Only creation needs the breach check — an existing account with a
-  // breached password still has to be able to log in and change it.
-  if (await isPwnedPassword(password)) {
-    return NextResponse.json({ error: PWNED_PASSWORD_MSG }, { status: 400 });
+  const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+  if (signInError) {
+    return NextResponse.json({ error: INVALID_CREDENTIALS }, { status: 401 });
   }
-
-  const admin = createAdminClient();
-  const { error: createError } = await admin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    // app_metadata is service-role-only: it's what grants access (see lib/auth/access).
-    app_metadata: { [ACCESS_FLAG]: true },
-    // Solo las cuentas nuevas ven la bienvenida; las existentes no tienen la marca.
-    user_metadata: { needs_onboarding: true },
-  });
-
-  if (createError) {
-    if (/already.*registered|already.*exists/i.test(createError.message)) {
-      return NextResponse.json({ error: INVALID_CREDENTIALS }, { status: 401 });
-    }
-    console.error('[auth/continue] createUser failed:', createError.message);
-    return NextResponse.json({ error: 'No se pudo crear la cuenta. Probá de nuevo.' }, { status: 500 });
+  if (!hasAppAccess(data.user)) {
+    // Allowlisted but the flag is missing (e.g. an unconfirmed account):
+    // don't leave a session behind that the app would ignore anyway.
+    await supabase.auth.signOut();
+    return NextResponse.json({ error: INVALID_CREDENTIALS }, { status: 401 });
   }
-
-  const { error: newSignInError } = await supabase.auth.signInWithPassword({ email, password });
-  if (newSignInError) {
-    console.error('[auth/continue] sign-in after create failed:', newSignInError.message);
-    return NextResponse.json({ error: 'No se pudo iniciar sesión. Probá de nuevo.' }, { status: 500 });
-  }
-
   return NextResponse.json({ ok: true });
 }

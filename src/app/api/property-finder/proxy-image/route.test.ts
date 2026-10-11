@@ -4,6 +4,11 @@ import { NextRequest } from 'next/server';
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
 
+let sessionUser: { id: string; app_metadata: Record<string, unknown> } | null = { id: 'u1', app_metadata: { plinth_access: true } };
+vi.mock('@/lib/supabase/server', () => ({
+  createClient: () => ({ auth: { getUser: async () => ({ data: { user: sessionUser } }) } }),
+}));
+
 const { GET } = await import('./route');
 
 function call(url: string) {
@@ -14,9 +19,21 @@ function image(type = 'image/jpeg', init: ResponseInit = {}) {
   return new Response(new Uint8Array([1, 2, 3]), { status: 200, ...init, headers: { 'content-type': type, ...init.headers } });
 }
 
-beforeEach(() => fetchMock.mockReset());
+beforeEach(() => {
+  fetchMock.mockReset();
+  sessionUser = { id: 'u1', app_metadata: { plinth_access: true } };
+});
 
 describe('GET /api/property-finder/proxy-image', () => {
+  it('exige una sesión con acceso, sin hacer el pedido', async () => {
+    for (const user of [null, { id: 'u2', app_metadata: {} }]) {
+      sessionUser = user;
+      const res = await call('https://imgar.zonapropcdn.com/avisos/1/foto.jpg');
+      expect(res.status).toBe(401);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('sirve fotos de los portales permitidos, con headers que impiden ejecutar nada', async () => {
     fetchMock.mockResolvedValueOnce(image());
     const res = await call('https://imgar.zonapropcdn.com/avisos/1/foto.jpg');

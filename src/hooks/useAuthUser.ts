@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { hasAppAccess } from '@/lib/auth/access';
+import { hasAppAccess, isAppOwner } from '@/lib/auth/access';
 import { isStartModule, messageToneFromMetadata, type MessageTone, type StartModule } from '@/lib/userPreferences';
 
 export interface AuthUser {
@@ -14,6 +14,8 @@ export interface AuthUser {
   messageTone: MessageTone;
   startModule: StartModule | null;
   needsOnboarding: boolean;
+  /** Puede aprobar solicitudes de acceso. Solo decide qué se muestra: el servidor lo vuelve a chequear. */
+  isOwner: boolean;
 }
 
 function toAuthUser(
@@ -37,6 +39,7 @@ function toAuthUser(
     messageTone: messageToneFromMetadata(meta),
     startModule: isStartModule(meta.start_module) ? meta.start_module : null,
     needsOnboarding: meta.needs_onboarding === true,
+    isOwner: isAppOwner(user),
   };
 }
 
@@ -45,7 +48,7 @@ const SCREENSHOT_BYPASS = false;
 export function useAuthUser() {
   const [user, setUser] = useState<AuthUser | null>(
     SCREENSHOT_BYPASS
-      ? { id: 'demo-agent', email: 'demo@plinth.app', name: 'Agente Demo', avatarUrl: null, phone: '', preferredName: 'Agente', messageTone: 'cercano', startModule: null, needsOnboarding: false }
+      ? { id: 'demo-agent', email: 'demo@plinth.app', name: 'Agente Demo', avatarUrl: null, phone: '', preferredName: 'Agente', messageTone: 'cercano', startModule: null, needsOnboarding: false, isOwner: false }
       : null,
   );
   const [isLoading, setIsLoading] = useState(!SCREENSHOT_BYPASS);

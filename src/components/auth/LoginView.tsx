@@ -18,6 +18,10 @@ export function LoginView({ onSuccess }: LoginViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [brandExpanded, setBrandExpanded] = useState(false);
   const [justSucceeded, setJustSucceeded] = useState(false);
+  // "Solicitar acceso": a person without an account asks the owner for one.
+  const [mode, setMode] = useState<'login' | 'request'>('login');
+  const [nombre, setNombre] = useState('');
+  const [requestDone, setRequestDone] = useState<string | null>(null);
 
   // Plays the same "P then linth" write-in PlinthBrand already does when the
   // sidebar opens — just triggered on mount here instead of on user toggle.
@@ -26,11 +30,42 @@ export function LoginView({ onSuccess }: LoginViewProps) {
     return () => clearTimeout(t);
   }, []);
 
+  const switchMode = (next: 'login' | 'request') => {
+    setMode(next);
+    setError(null);
+    setRequestDone(null);
+  };
+
+  const handleRequest = async () => {
+    try {
+      const res = await fetch('/api/auth/request-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, nombre }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'No se pudo enviar la solicitud.');
+        return;
+      }
+      setRequestDone(data.message);
+    } catch {
+      setError('Error de red. Probá de nuevo.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
     setIsSubmitting(true);
     setError(null);
+
+    if (mode === 'request') {
+      await handleRequest();
+      return;
+    }
 
     try {
       const res = await fetch('/api/auth/continue', {
@@ -77,7 +112,7 @@ export function LoginView({ onSuccess }: LoginViewProps) {
           <div className="space-y-4">
             <div className="space-y-1.5">
               <label htmlFor="email" className="text-2xs font-semibold text-[#8f96a3] uppercase tracking-wide">
-                Email autorizado
+                Email
               </label>
               <input
                 id="email"
@@ -91,35 +126,71 @@ export function LoginView({ onSuccess }: LoginViewProps) {
               />
             </div>
 
-            <div className="space-y-1.5">
-              <label htmlFor="password" className="text-2xs font-semibold text-[#8f96a3] uppercase tracking-wide">
-                Contraseña
-              </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={8}
-                autoComplete="current-password"
-                disabled={justSucceeded}
-                className="w-full rounded-subtle border border-[#27272A] bg-[#09090B] px-3 py-2 text-sm text-[#FAFAFA] placeholder:text-[#52525B] focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50"
-              />
-            </div>
+            {mode === 'request' ? (
+              <div className="space-y-1.5">
+                <label htmlFor="nombre" className="text-2xs font-semibold text-[#8f96a3] uppercase tracking-wide">
+                  Nombre
+                </label>
+                <input
+                  id="nombre"
+                  type="text"
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                  maxLength={80}
+                  autoComplete="name"
+                  disabled={!!requestDone}
+                  className="w-full rounded-subtle border border-[#27272A] bg-[#09090B] px-3 py-2 text-sm text-[#FAFAFA] placeholder:text-[#52525B] focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50"
+                />
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <label htmlFor="password" className="text-2xs font-semibold text-[#8f96a3] uppercase tracking-wide">
+                  Contraseña
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  autoComplete="current-password"
+                  disabled={justSucceeded}
+                  className="w-full rounded-subtle border border-[#27272A] bg-[#09090B] px-3 py-2 text-sm text-[#FAFAFA] placeholder:text-[#52525B] focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50"
+                />
+              </div>
+            )}
           </div>
 
           {error && (
-            <p className="text-xs text-error bg-error-muted/20 border border-error/30 rounded-subtle px-3 py-2">{error}</p>
+            <p role="alert" className="text-xs text-error bg-error-muted/20 border border-error/30 rounded-subtle px-3 py-2">
+              {error}
+            </p>
+          )}
+          {requestDone && (
+            <p role="status" className="text-xs text-[#d4d4d8] bg-[#18181b] border border-[#27272A] rounded-subtle px-3 py-2">
+              {requestDone}
+            </p>
+          )}
+
+          {!requestDone && (
+            <button
+              type="submit"
+              disabled={isSubmitting || justSucceeded}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-md bg-accent text-zinc-950 text-sm font-semibold shadow-subtle hover:bg-accent-hover transition-colors active:scale-[0.98] disabled:opacity-50"
+            >
+              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              <span>{mode === 'request' ? 'Solicitar acceso' : 'Continuar'}</span>
+            </button>
           )}
 
           <button
-            type="submit"
+            type="button"
+            onClick={() => switchMode(mode === 'login' ? 'request' : 'login')}
             disabled={isSubmitting || justSucceeded}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-md bg-accent text-zinc-950 text-sm font-semibold shadow-subtle hover:bg-accent-hover transition-colors active:scale-[0.98] disabled:opacity-50"
+            className="w-full text-center text-xs text-[#8f96a3] hover:text-[#FAFAFA] transition-colors disabled:opacity-50"
           >
-            {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-            <span>Continuar</span>
+            {mode === 'login' ? '¿No tenés cuenta? Solicitar acceso' : 'Ya tengo cuenta, iniciar sesión'}
           </button>
         </motion.form>
       </div>
