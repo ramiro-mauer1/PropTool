@@ -12,10 +12,14 @@ export const PlinthBrand = ({
 }) => {
   return (
     <div className={`flex items-center ${className}`}>
+      {/* aspect-[…] = proporción del viewBox. Sin ella Safari no sabe el ancho
+          de estos SVG: con w-auto los estira y con min-width:max-content les
+          da 300px fijos. Con la proporción y shrink-0 no se aplastan durante
+          la animación de colapso. */}
       {/* 1. Elemento Fijo: "P" */}
       <svg
         viewBox="144 394 151 196"
-        className="h-full w-auto fill-current shrink-0"
+        className="h-full w-auto aspect-[151/196] fill-current shrink-0"
         preserveAspectRatio="xMidYMid meet"
       >
         <g transform="translate(0,1024) scale(0.1,-0.1)" stroke="none">
@@ -35,8 +39,7 @@ export const PlinthBrand = ({
       >
         <svg
           viewBox="295 394 538 196"
-          className="h-full w-auto fill-current shrink-0"
-          style={{ minWidth: "max-content" }}
+          className="h-full w-auto aspect-[538/196] fill-current shrink-0"
           preserveAspectRatio="xMidYMid meet"
         >
           <g transform="translate(0,1024) scale(0.1,-0.1)" stroke="none">
@@ -53,7 +56,7 @@ export const PlinthBrand = ({
       {/* 3. Punto Acid Lime */}
       <motion.svg
         viewBox="833 394 73 196"
-        className="h-full w-auto shrink-0"
+        className="h-full w-auto aspect-[73/196] shrink-0"
         preserveAspectRatio="xMidYMid meet"
         layout
       >

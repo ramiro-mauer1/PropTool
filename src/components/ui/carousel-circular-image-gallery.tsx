@@ -407,103 +407,109 @@ export function ImageGallery({
   return (
     <div className="relative flex flex-col items-center justify-center w-full h-full max-w-full overflow-hidden select-none py-1">
       {/* ================= BARRA DE HERRAMIENTAS CONTEXTUALES ================= */}
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full glass-panel mb-3 z-[105] shrink-0 shadow-ambient">
-        {/* Herramienta: Pincel */}
-        <button
-          type="button"
-          onClick={() => setActiveTool("brush")}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium btn-tactile ${
-            activeTool === "brush"
-              ? "bg-accent text-zinc-950 font-semibold shadow-subtle"
-              : "text-muted hover:text-foreground hover:bg-surface-raised/80"
-          }`}
-          title="Pincel: Pintar o retocar máscara de marca de agua"
-          aria-label="Pincel para pintar máscara"
-        >
-          <Paintbrush className="w-3.5 h-3.5" />
-          <span>Pincel</span>
-        </button>
+      {/* En móvil la barra se desliza horizontalmente en lugar de desbordarse:
+          los botones nunca se comprimen ni se pisan entre sí. */}
+      <div className="w-full max-w-full shrink-0 mb-2 sm:mb-3 z-[105] flex justify-start overflow-x-auto no-scrollbar scroll-touch px-2 sm:px-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-full glass-panel shadow-ambient mx-auto w-max">
+          {/* Herramienta: Pincel */}
+          <button
+            type="button"
+            onClick={() => setActiveTool("brush")}
+            className={`flex shrink-0 items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-full text-xs font-medium whitespace-nowrap btn-tactile ${
+              activeTool === "brush"
+                ? "bg-accent text-zinc-950 font-semibold shadow-subtle"
+                : "text-muted hover:text-foreground hover:bg-surface-raised/80"
+            }`}
+            title="Pincel: Pintar o retocar máscara de marca de agua"
+            aria-label="Pincel para pintar máscara"
+          >
+            <Paintbrush className="w-3.5 h-3.5" />
+            <span>Pincel</span>
+          </button>
 
-        {/* Herramienta: Goma */}
-        <button
-          type="button"
-          onClick={() => setActiveTool("eraser")}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium btn-tactile ${
-            activeTool === "eraser"
-              ? "bg-error text-white font-semibold shadow-subtle"
-              : "text-muted hover:text-foreground hover:bg-surface-raised/80"
-          }`}
-          title="Goma: Borrar trazos de máscara"
-          aria-label="Goma para borrar"
-        >
-          <Eraser className="w-3.5 h-3.5" />
-          <span>Goma</span>
-        </button>
+          {/* Herramienta: Goma */}
+          <button
+            type="button"
+            onClick={() => setActiveTool("eraser")}
+            className={`flex shrink-0 items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-full text-xs font-medium whitespace-nowrap btn-tactile ${
+              activeTool === "eraser"
+                ? "bg-error text-white font-semibold shadow-subtle"
+                : "text-muted hover:text-foreground hover:bg-surface-raised/80"
+            }`}
+            title="Goma: Borrar trazos de máscara"
+            aria-label="Goma para borrar"
+          >
+            <Eraser className="w-3.5 h-3.5" />
+            <span>Goma</span>
+          </button>
 
-        {/* Herramienta: Restablecer máscara */}
-        <button
-          type="button"
-          onClick={handleClearCurrentMask}
-          className="p-1.5 rounded-full text-muted hover:text-error hover:bg-surface-raised/80 btn-tactile"
-          title="Borrar máscara actual"
-          aria-label="Borrar toda la máscara"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-        </button>
+          {/* Herramienta: Restablecer máscara */}
+          <button
+            type="button"
+            onClick={handleClearCurrentMask}
+            className="flex shrink-0 items-center justify-center w-9 h-9 sm:w-auto sm:h-auto sm:p-1.5 rounded-full text-muted hover:text-error hover:bg-surface-raised/80 btn-tactile"
+            title="Borrar máscara actual"
+            aria-label="Borrar toda la máscara"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </button>
 
-        {/* Acciones de imagen procesada */}
-        {currentItem?.isProcessed && (
-          <>
-            <div className="h-4 w-px bg-border mx-1" />
-            <button
-              type="button"
-              onClick={() => setShowOriginalComparison((prev) => !prev)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium btn-tactile ${
-                showOriginalComparison
-                  ? "bg-surface-raised text-accent border border-accent/40"
-                  : "text-secondary hover:text-foreground hover:bg-surface-raised/80"
-              }`}
-              title="Comparar con la imagen original"
-            >
-              <ArrowLeftRight className="w-3.5 h-3.5" />
-              <span>{showOriginalComparison ? "Ver Limpia" : "Ver Original"}</span>
-            </button>
+          {/* Acciones de imagen procesada */}
+          {currentItem?.isProcessed && (
+            <>
+              <div className="h-4 w-px shrink-0 bg-border mx-0.5 sm:mx-1" />
+              <button
+                type="button"
+                onClick={() => setShowOriginalComparison((prev) => !prev)}
+                className={`flex shrink-0 items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-full text-xs font-medium whitespace-nowrap btn-tactile ${
+                  showOriginalComparison
+                    ? "bg-surface-raised text-accent border border-accent/40"
+                    : "text-secondary hover:text-foreground hover:bg-surface-raised/80"
+                }`}
+                title="Comparar con la imagen original"
+              >
+                <ArrowLeftRight className="w-3.5 h-3.5" />
+                <span>{showOriginalComparison ? "Ver Limpia" : "Ver Original"}</span>
+              </button>
 
-            {currentItem.cleanUrl && (
-              <>
-                <button
-                  type="button"
-                  onClick={handleDownloadClean}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-success/15 hover:bg-success/25 text-success border border-success/30 btn-tactile"
-                  title="Descargar imagen en alta calidad"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Descargar</span>
-                </button>
-
-                {onSendToEnhance && (
+              {currentItem.cleanUrl && (
+                <>
                   <button
                     type="button"
-                    onClick={() => onSendToEnhance(currentItem.id)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-accent text-zinc-950 hover:bg-accent-hover btn-tactile shadow-subtle"
-                    title="Aumentar nitidez con Mejora de Fotos"
+                    onClick={handleDownloadClean}
+                    className="flex shrink-0 items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-success/15 hover:bg-success/25 text-success border border-success/30 btn-tactile"
+                    title="Descargar imagen en alta calidad"
                   >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Mejorar 4x</span>
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Descargar</span>
                   </button>
-                )}
-              </>
-            )}
-          </>
-        )}
+
+                  {onSendToEnhance && (
+                    <button
+                      type="button"
+                      onClick={() => onSendToEnhance(currentItem.id)}
+                      className="flex shrink-0 items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-accent text-zinc-950 hover:bg-accent-hover btn-tactile shadow-subtle"
+                      title="Aumentar nitidez con Mejora de Fotos"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Mejorar 4x</span>
+                    </button>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Contenedor central: Flecha Izquierda + Marco del Carrusel + Flecha Derecha */}
       <div className="relative flex items-center justify-center w-full max-w-full px-2 sm:px-6 gap-3 sm:gap-5 overflow-hidden shrink-0">
         {/* ================= FLECHA IZQUIERDA (ANTERIOR) ================= */}
+        {/* En móvil la navegación vive en la fila inferior para que la foto
+            aproveche todo el ancho disponible. */}
         <button
           type="button"
-          className="flex-shrink-0 z-[104] flex h-10 w-10 sm:h-11 sm:w-11 cursor-pointer items-center justify-center rounded-full glass-panel text-foreground hover:text-accent outline-none btn-tactile disabled:opacity-20 disabled:cursor-not-allowed group"
+          className="hidden sm:flex flex-shrink-0 z-[104] h-11 w-11 cursor-pointer items-center justify-center rounded-full glass-panel text-foreground hover:text-accent outline-none btn-tactile disabled:opacity-20 disabled:cursor-not-allowed group"
           onClick={prev}
           disabled={items.length <= 1}
           aria-label="Imagen anterior"
@@ -512,33 +518,40 @@ export function ImageGallery({
         </button>
 
         {/* ================= MARCO DEL CARRUSEL CIRCULAR ================= */}
-        <div className="relative w-[min(740px,86vmin,calc(100vw-110px),calc(100vh-210px))] aspect-square flex-shrink-0 overflow-hidden rounded-panel shadow-ambient border border-border/80 bg-surface-sunken">
+        <div className="relative w-[min(740px,86vmin,calc(100vw-1.5rem),calc(100dvh-16rem))] sm:w-[min(740px,86vmin,calc(100vw-7rem),calc(100dvh-13rem))] aspect-square flex-shrink-0 overflow-hidden rounded-panel shadow-ambient border border-border/80 bg-surface-sunken">
           {/* Header informativo dentro del marco */}
-          <div className="absolute top-3.5 left-3.5 right-3.5 z-[102] flex items-center justify-between pointer-events-none">
-            <span className="px-3 py-1 rounded-full text-xs font-mono font-medium tracking-wide bg-black/75 text-foreground border border-white/10 backdrop-blur-md shadow-subtle truncate max-w-[220px]">
+          <div className="absolute top-2.5 left-2.5 right-2.5 sm:top-3.5 sm:left-3.5 sm:right-3.5 z-[102] flex items-start justify-between gap-2 pointer-events-none">
+            <span className="min-w-0 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-mono font-medium tracking-wide bg-black/75 text-foreground border border-white/10 backdrop-blur-md shadow-subtle truncate">
               {currentItem?.title || `Imagen ${opened + 1}`}
             </span>
 
             {/* Badge de estado */}
             {currentItem?.isProcessed ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-950/85 text-emerald-300 border border-emerald-500/40 backdrop-blur-md shadow-md">
+              <span className="shrink-0 inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-0.5 rounded-full text-[11px] sm:text-xs font-medium bg-emerald-950/85 text-emerald-300 border border-emerald-500/40 backdrop-blur-md shadow-md">
                 <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                Limpia con IA
+                <span className="hidden xs:inline">Limpia con IA</span>
+                <span className="xs:hidden">Limpia</span>
               </span>
             ) : currentBBox || activeStrokes.length > 0 ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-accent/15 text-accent border border-accent/20 backdrop-blur-md shadow-md">
+              <span className="shrink-0 inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-0.5 rounded-full text-[11px] sm:text-xs font-medium bg-accent/15 text-accent border border-accent/20 backdrop-blur-md shadow-md">
                 <Sparkles className="w-3 h-3 text-accent" />
-                Máscara activa
+                <span className="hidden xs:inline">Máscara activa</span>
+                <span className="xs:hidden">Máscara</span>
               </span>
             ) : null}
           </div>
 
-          {/* Indicador sutil de baja resolución */}
+          {/* Indicador sutil de baja resolución.
+              En móvil se sube al 12% para no pisar los puntos de navegación
+              que el SVG dibuja al 92,5% de la altura del marco. */}
           {currentItem?.isLowQuality && (
-            <div className="absolute bottom-3.5 left-3.5 z-[102] pointer-events-none">
+            <div className="absolute bottom-[12%] left-2.5 right-2.5 sm:bottom-3.5 sm:left-3.5 sm:right-auto z-[102] pointer-events-none">
               <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium bg-black/70 text-amber-300/90 border border-amber-500/30 backdrop-blur-sm shadow-md">
-                <AlertTriangle className="w-3 h-3 text-amber-400" />
-                Baja resolución (el resultado puede variar)
+                <AlertTriangle className="w-3 h-3 shrink-0 text-amber-400" />
+                <span className="hidden xs:inline">
+                  Baja resolución (el resultado puede variar)
+                </span>
+                <span className="xs:hidden">Baja resolución</span>
               </span>
             </div>
           )}
@@ -667,7 +680,7 @@ export function ImageGallery({
         {/* ================= FLECHA DERECHA (SIGUIENTE) ================= */}
         <button
           type="button"
-          className="flex-shrink-0 z-[104] flex h-10 w-10 sm:h-11 sm:w-11 cursor-pointer items-center justify-center rounded-full glass-panel text-foreground hover:text-accent outline-none btn-tactile disabled:opacity-20 disabled:cursor-not-allowed group"
+          className="hidden sm:flex flex-shrink-0 z-[104] h-11 w-11 cursor-pointer items-center justify-center rounded-full glass-panel text-foreground hover:text-accent outline-none btn-tactile disabled:opacity-20 disabled:cursor-not-allowed group"
           onClick={next}
           disabled={items.length <= 1}
           aria-label="Imagen siguiente"
@@ -676,11 +689,39 @@ export function ImageGallery({
         </button>
       </div>
 
-      {/* Indicador inferior de posición: e.g. "Imagen 2 de 5" */}
-      <div className="mt-4 flex items-center gap-2 text-xs font-mono text-muted">
-        <span>Imagen {opened + 1} de {items.length}</span>
-        <span>•</span>
-        <span>Navegación estática (solo flechas)</span>
+      {/* Indicador inferior de posición. En móvil incorpora la navegación
+          (las flechas laterales se ocultan para no comerse el ancho). */}
+      <div className="mt-3 sm:mt-4 shrink-0 flex items-center justify-center gap-2 text-xs font-mono text-muted">
+        <button
+          type="button"
+          onClick={prev}
+          disabled={items.length <= 1}
+          aria-label="Imagen anterior"
+          className="sm:hidden flex h-10 w-10 shrink-0 items-center justify-center rounded-full glass-panel text-foreground active:scale-95 transition-transform disabled:opacity-20"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+
+        <span className="tabular-nums px-1 whitespace-nowrap">
+          <span className="hidden sm:inline">Imagen </span>
+          {opened + 1}
+          <span className="sm:hidden"> / </span>
+          <span className="hidden sm:inline"> de </span>
+          {items.length}
+        </span>
+
+        <span className="hidden sm:inline">•</span>
+        <span className="hidden sm:inline">Navegación estática (solo flechas)</span>
+
+        <button
+          type="button"
+          onClick={next}
+          disabled={items.length <= 1}
+          aria-label="Imagen siguiente"
+          className="sm:hidden flex h-10 w-10 shrink-0 items-center justify-center rounded-full glass-panel text-foreground active:scale-95 transition-transform disabled:opacity-20"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
       </div>
     </div>
   );

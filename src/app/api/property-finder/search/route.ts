@@ -1,4 +1,8 @@
 import { type NextRequest } from 'next/server';
+import { SearchError, isSearchConfigured, searchListings, type RawListing } from '@/lib/property-finder/serpSearch';
+import { classifyOwnership } from '@/lib/property-finder/ownerClassifier';
+import { requireUser } from '@/lib/auth/requireUser';
+import { enforceRateLimits } from '@/lib/security/rateLimit';
 import type {
   PropertySearchQuery,
   PropertySearchResult,
@@ -7,20 +11,11 @@ import type {
   OperationType,
   PropertyType,
   OwnerType,
-  Portal,
 } from '@/types/property-finder';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export const maxDuration = 45;
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-// gemini-flash-lite-latest → maps to gemini-3.5-flash-lite (higher RPM, supports google_search)
-const GEMINI_MODEL_FLASH  = 'gemini-flash-lite-latest';
-const GEMINI_MODEL_SEARCH = 'gemini-flash-lite-latest';
-const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 // ─── SSE Helpers ──────────────────────────────────────────────────────────────
 
@@ -30,163 +25,16 @@ function encodeSSE(event: SSEEvent): Uint8Array {
   return encoder.encode(`data: ${JSON.stringify(event)}\n\n`);
 }
 
-// ─── Gemini helper ────────────────────────────────────────────────────────────
-
-interface GeminiResponse {
-  candidates?: Array<{
-    content?: { parts?: Array<{ text?: string }> };
-    groundingMetadata?: {
-      groundingChunks?: Array<{ web?: { uri?: string; title?: string } }>;
-      searchEntryPoint?: { renderedContent?: string };
-    };
-  }>;
-  error?: { code: number; message: string; status: string };
-}
-
-interface GeminiCallOpts {
-  json?: boolean;
-  maxTokens?: number;
-  temperature?: number;
-  useSearch?: boolean;
-  /** Retry once after this many ms if 429 */
-  retryMs?: number;
-}
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-// Models to try in order if one fails
-const MODEL_FALLBACKS = [
-  'gemini-flash-latest',
-  'gemini-pro-latest',
-  'gemini-flash-lite-latest',
-];
-
-async function callGeminiOnce(
-  model: string,
-  prompt: string,
-  opts: GeminiCallOpts = {}
-): Promise<{ text: string; sources: Array<{ uri: string; title: string }>; status: number }> {
-  const body: Record<string, unknown> = {
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: opts.temperature ?? 0.1,
-      maxOutputTokens: opts.maxTokens ?? 1024,
-      ...(opts.json ? { responseMimeType: 'application/json' } : {}),
-    },
-  };
-
-  if (opts.useSearch) {
-    body.tools = [{ google_search: {} }];
-  }
-
-  const res = await fetch(
-    `${GEMINI_BASE}/${model}:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(28_000),
-    }
-  );
-
-  const data = (await res.json()) as GeminiResponse;
-
-  if (data.error) {
-    return { text: '', sources: [], status: data.error.code };
-  }
-
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-  const chunks = data.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
-  const sources = chunks
-    .map((c) => ({ uri: c.web?.uri ?? '', title: c.web?.title ?? '' }))
-    .filter((s) => s.uri);
-
-  return { text, sources, status: res.status };
-}
-
-async function callGemini(
-  model: string,
-  prompt: string,
-  opts: GeminiCallOpts = {}
-): Promise<{ text: string; sources: Array<{ uri: string; title: string }> }> {
-  // Try primary model, retry once after 3s on 429
-  let result = await callGeminiOnce(model, prompt, opts);
-
-  if (result.status === 429) {
-    console.warn(`[Gemini] 429 on ${model}, retrying after 4s...`);
-    await sleep(4000);
-    result = await callGeminiOnce(model, prompt, opts);
-  }
-
-  if (result.status === 429) {
-    // Try fallback models
-    for (const fallback of MODEL_FALLBACKS) {
-      if (fallback === model) continue;
-      console.warn(`[Gemini] Trying fallback model: ${fallback}`);
-      await sleep(2000);
-      result = await callGeminiOnce(fallback, prompt, opts);
-      if (result.status !== 429 && result.status !== 404) break;
-    }
-  }
-
-  if (result.status === 429) throw new Error('Gemini 429: quota exhausted, intentá en unos segundos');
-  if (result.status === 404) throw new Error(`Gemini 404: modelo no disponible`);
-  if (!result.text && result.sources.length === 0) throw new Error('Gemini returned empty response');
-
-  return { text: result.text, sources: result.sources };
-}
-
-// ─── Step 1: Query Planner ────────────────────────────────────────────────────
+// ─── Step 1: Query Planner (heuristic, no AI, no quota) ───────────────────────
 
 function normalizeSlug(s: string): string {
   return s
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9\s-]/g, '')
     .trim()
     .replace(/\s+/g, '-');
-}
-
-async function parseQueryWithGemini(rawQuery: string): Promise<PropertySearchQuery> {
-  const prompt = `Sos un experto en bienes raíces argentinos. Analizá la consulta y extraé los parámetros en JSON válido.
-
-Consulta: "${rawQuery}"
-
-Devolvé SOLO un JSON con esta estructura exacta (sin texto adicional):
-{
-  "propertyType": "departamento"|"monoambiente"|"casa"|"ph"|"local"|"oficina"|"terreno"|"cochera"|"otro"|null,
-  "operation": "alquiler"|"venta"|"alquiler-temporal",
-  "location": "nombre de zona/barrio como se mencionó, o null",
-  "locationNormalized": "nombre en minúsculas sin acentos con guiones",
-  "minPrice": número o null,
-  "maxPrice": número o null,
-  "currency": "ARS"|"USD"|null,
-  "ownerType": "dueno-directo"|"inmobiliaria"|"cualquiera",
-  "minRooms": número o null,
-  "maxRooms": número o null,
-  "extras": []
-}
-
-Reglas: "dueño directo"/"sin comisión"/"propietario" → dueno-directo. Sin mención → cualquiera. "$200k"→200000. Sin operación→alquiler.`;
-
-  const { text } = await callGemini(GEMINI_MODEL_FLASH, prompt, { json: true, maxTokens: 512 });
-  const parsed = JSON.parse(text) as Partial<PropertySearchQuery>;
-
-  return {
-    rawQuery,
-    propertyType: (parsed.propertyType as PropertyType) ?? null,
-    operation: (parsed.operation as OperationType) ?? 'alquiler',
-    location: parsed.location ?? null,
-    locationNormalized: parsed.locationNormalized ?? (parsed.location ? normalizeSlug(parsed.location) : null),
-    minPrice: parsed.minPrice ?? null,
-    maxPrice: parsed.maxPrice ?? null,
-    currency: parsed.currency ?? null,
-    ownerType: (parsed.ownerType as OwnerType) ?? 'cualquiera',
-    minRooms: parsed.minRooms ?? null,
-    maxRooms: parsed.maxRooms ?? null,
-    extras: Array.isArray(parsed.extras) ? (parsed.extras as string[]) : [],
-  };
 }
 
 function parseQueryHeuristic(rawQuery: string): PropertySearchQuery {
@@ -209,19 +57,30 @@ function parseQueryHeuristic(rawQuery: string): PropertySearchQuery {
   if (/dueño\s*directo|propietario|sin\s*comisi[oó]n|sin\s*inmobil/i.test(q)) ownerType = 'dueno-directo';
   else if (/inmobiliaria|con\s*comisi[oó]n/i.test(q)) ownerType = 'inmobiliaria';
 
+  // A bare number only counts as a price if it has a k/m multiplier or is
+  // large enough to plausibly be one (avoids matching "2" from "2 ambientes").
   let maxPrice: number | null = null;
   let currency: 'ARS' | 'USD' | null = null;
-  const priceMatch = q.match(/(\d[\d.,]*)\s*([kKmM]?)/);
-  if (priceMatch) {
-    let price = parseFloat(priceMatch[1].replace(',', ''));
-    const mult = priceMatch[2].toLowerCase();
-    if (mult === 'k') price *= 1000;
-    else if (mult === 'm') price *= 1_000_000;
-    maxPrice = price;
-    currency = /usd|dólar|dollar/i.test(q) ? 'USD' : 'ARS';
+  for (const match of Array.from(q.matchAll(/(\d[\d.,]*)\s*([kKmM]?)/g))) {
+    const [, numStr, mult] = match;
+    let price = parseFloat(numStr.replace(/\./g, '').replace(',', '.'));
+    const hasMult = Boolean(mult);
+    if (hasMult) price *= mult.toLowerCase() === 'k' ? 1000 : 1_000_000;
+    if (hasMult || price >= 10000) {
+      maxPrice = price;
+      currency = /usd|d[oó]lar(es)?|dollar|u\$s/i.test(q) ? 'USD' : 'ARS';
+      break;
+    }
   }
 
-  const locMatch = q.match(/(?:en|cerca de|por|zona)\s+([A-Za-zÁáÉéÍíÓóÚúÑñü\s]+?)(?:[,.]|$|\s+(?:dueño|prop|sin|con|hasta|presup|dpto|depa))/i);
+  // Word-bounded (not comma/digit-bounded) so "en Alquiler en Palermo" or
+  // "en Palermo 2 ambientes" don't swallow the operation word or truncate to null.
+  const LOCATION_FILLER = 'la|el|los|las|de|del|zona';
+  const LOCATION_STOPWORDS = 'due[ñn]o|propietario|prop|sin|con|hasta|presup|dpto|depa|alquiler|venta|temporal|vacacion|comisi[oó]n|directo';
+  const locMatch = q.match(new RegExp(
+    `(?:en|cerca de|por|zona)\\s+(?:(?:${LOCATION_FILLER})\\s+)*((?:(?!\\b(?:${LOCATION_STOPWORDS})\\b)[A-Za-zÁáÉéÍíÓóÚúÑñü]+)(?:\\s+(?:(?!\\b(?:${LOCATION_STOPWORDS})\\b)[A-Za-zÁáÉéÍíÓóÚúÑñü]+)){0,2})`,
+    'i'
+  ));
   const location = locMatch?.[1]?.trim() ?? null;
   const locationNormalized = location ? normalizeSlug(location) : null;
 
@@ -235,148 +94,10 @@ function parseQueryHeuristic(rawQuery: string): PropertySearchQuery {
   };
 }
 
-async function parseQuery(rawQuery: string): Promise<PropertySearchQuery> {
-  // Always try heuristic first — it's instant and consumes no quota.
-  const heuristic = parseQueryHeuristic(rawQuery);
-
-  // Only call Gemini if the heuristic failed to extract the most critical fields
-  const needsGemini = GEMINI_API_KEY && (!heuristic.location || !heuristic.propertyType);
-
-  if (needsGemini) {
-    try { return await parseQueryWithGemini(rawQuery); }
-    catch (err) { console.warn('[QueryPlanner] Gemini failed, using heuristic:', err); }
-  }
-
-  return heuristic;
-}
-
-// ─── Step 2: Google Search Grounding via Gemini ───────────────────────────────
-
-interface RawListing {
-  title: string;
-  price: number | null;
-  currency: string | null;
-  location: string;
-  url: string;
-  portal: Portal;
-  ownerType: 'dueno-directo' | 'inmobiliaria' | 'desconocido';
-  rooms: number | null;
-  area: number | null;
-  description: string;
-}
-
-function detectPortal(url: string): Portal {
-  if (/mercadolibre|meli/i.test(url)) return 'MercadoLibre';
-  if (/zonaprop/i.test(url)) return 'Zonaprop';
-  if (/argenprop/i.test(url)) return 'Argenprop';
-  return 'Otro';
-}
-
-async function searchWithGeminiGrounding(
-  query: PropertySearchQuery
-): Promise<RawListing[]> {
-  // Build targeted search query for Argentine real estate portals
-  const opLabel = query.operation === 'venta' ? 'venta' : query.operation === 'alquiler-temporal' ? 'alquiler temporal' : 'alquiler';
-  const typeLabel = query.propertyType ?? 'propiedad';
-  const locationLabel = query.location ?? 'Buenos Aires';
-  const ownerLabel = query.ownerType === 'dueno-directo' ? ', dueño directo sin comisión' : '';
-  const priceLabel = query.maxPrice
-    ? `, hasta ${query.currency === 'USD' ? 'USD' : '$'} ${query.maxPrice.toLocaleString('es-AR')}`
-    : '';
-
-  const searchPrompt = `Buscá en la web publicaciones ACTUALES y REALES de inmuebles en Argentina con los siguientes criterios:
-- Tipo: ${typeLabel}
-- Operación: ${opLabel}
-- Zona/Barrio: ${locationLabel}${ownerLabel}${priceLabel}
-
-Portales a priorizar: zonaprop.com.ar, argenprop.com, inmuebles.mercadolibre.com.ar, properati.com.ar, infocasas.com.ar
-
-Para CADA resultado encontrado, extraé y devolvé un JSON array con este formato exacto:
-[
-  {
-    "title": "título de la publicación",
-    "price": número o null,
-    "currency": "ARS" o "USD" o null,
-    "location": "barrio/ciudad de la propiedad",
-    "url": "URL completa y real de la publicación",
-    "portal": "MercadoLibre" o "Zonaprop" o "Argenprop" o "Otro",
-    "ownerType": "dueno-directo" o "inmobiliaria" o "desconocido",
-    "rooms": número de ambientes o null,
-    "area": metros cuadrados o null,
-    "description": "descripción breve de 1 oración"
-  }
-]
-
-Devolvé SOLO el JSON array. Si no encontrás resultados reales con URLs verificables, devolvé [].`;
-
-  const { text, sources } = await callGemini(
-    GEMINI_MODEL_SEARCH,
-    searchPrompt,
-    { useSearch: true, maxTokens: 3000, temperature: 0.05 }
-  );
-
-  const listings: RawListing[] = [];
-
-  // Try to parse Gemini's JSON response
-  try {
-    // Extract JSON array from the text (Gemini might wrap it in markdown)
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]) as unknown[];
-      for (const item of parsed) {
-        if (typeof item !== 'object' || item === null) continue;
-        const obj = item as Record<string, unknown>;
-        if (!obj.title || !obj.url) continue;
-
-        listings.push({
-          title: String(obj.title),
-          price: obj.price != null ? Number(obj.price) : null,
-          currency: obj.currency ? String(obj.currency) : null,
-          location: String(obj.location ?? query.location ?? locationLabel),
-          url: String(obj.url),
-          portal: detectPortal(String(obj.url)),
-          ownerType: (obj.ownerType as RawListing['ownerType']) ?? 'desconocido',
-          rooms: obj.rooms != null ? Number(obj.rooms) : null,
-          area: obj.area != null ? Number(obj.area) : null,
-          description: String(obj.description ?? ''),
-        });
-      }
-    }
-  } catch (err) {
-    console.warn('[Grounding] JSON parse failed, using sources fallback:', err);
-  }
-
-  // Fallback: if Gemini didn't return structured JSON but found sources,
-  // create basic listings from the grounding sources
-  if (listings.length === 0 && sources.length > 0) {
-    for (const source of sources.slice(0, 10)) {
-      if (!source.uri || !source.title) continue;
-      // Only include real estate listing URLs (not search/homepage)
-      const isListingUrl = /\d{6,}|propiedades\/|inmueble\/|listing/i.test(source.uri);
-      if (!isListingUrl && !/zonaprop|argenprop|mercadolibre|properati|infocasas/i.test(source.uri)) continue;
-
-      listings.push({
-        title: source.title,
-        price: null,
-        currency: null,
-        location: query.location ?? locationLabel,
-        url: source.uri,
-        portal: detectPortal(source.uri),
-        ownerType: 'desconocido',
-        rooms: null,
-        area: null,
-        description: '',
-      });
-    }
-  }
-
-  return listings;
-}
-
-// ─── Step 3: Reranker ─────────────────────────────────────────────────────────
+// ─── Step 2: Reranker ─────────────────────────────────────────────────────────
 
 function normalizeForMatch(s: string): string {
-  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function scoreResult(result: RawListing, query: PropertySearchQuery): MatchBreakdown {
@@ -452,7 +173,7 @@ function scoreResult(result: RawListing, query: PropertySearchQuery): MatchBreak
   };
 }
 
-// ─── Step 4: Synthetic Summaries ──────────────────────────────────────────────
+// ─── Step 3: Synthetic Summaries (template-based, no AI) ──────────────────────
 
 function heuristicSummary(result: PropertySearchResult, query: PropertySearchQuery): string {
   const parts: string[] = [];
@@ -470,48 +191,20 @@ function heuristicSummary(result: PropertySearchResult, query: PropertySearchQue
   return parts.join('. ') + '.';
 }
 
-async function generateBatchSummaries(
-  results: PropertySearchResult[],
-  query: PropertySearchQuery
-): Promise<string[]> {
-  if (!GEMINI_API_KEY || results.length === 0) return results.map((r) => heuristicSummary(r, query));
-
-  const condLabel =
-    query.ownerType === 'dueno-directo' ? 'Dueño directo (sin comisión)'
-    : query.ownerType === 'inmobiliaria' ? 'Con inmobiliaria'
-    : 'Cualquier vendedor';
-
-  const listStr = results
-    .map((r, i) =>
-      `${i + 1}. "${r.title}" | ${r.location} | ${r.price ? `${r.currency ?? ''} ${r.price.toLocaleString('es-AR')}` : 'Precio a consultar'} | ${r.ownerType} | Match: ${r.matchScore}%`
-    ).join('\n');
-
-  const prompt = `Para cada una de las ${results.length} propiedades, generá una síntesis comercial de 2 oraciones cortas (máx 100 caracteres total) que explique por qué es relevante para el pedido.
-
-Pedido: "${query.rawQuery}"
-Condición: ${condLabel}
-
-${listStr}
-
-Devolvé SOLO un JSON array de strings, uno por propiedad, mismo orden:`;
-
-  try {
-    const { text } = await callGemini(GEMINI_MODEL_FLASH, prompt, { json: true, maxTokens: 1200, temperature: 0.3 });
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]) as string[];
-      if (Array.isArray(parsed) && parsed.length === results.length) return parsed.map((s) => String(s));
-    }
-    throw new Error('length mismatch');
-  } catch (err) {
-    console.warn('[Summaries] Batch failed:', err);
-    return results.map((r) => heuristicSummary(r, query));
-  }
-}
-
 // ─── POST Handler ─────────────────────────────────────────────────────────────
 
+const MAX_QUERY_LENGTH = 300;
+
 export async function POST(request: NextRequest): Promise<Response> {
+  const auth = await requireUser();
+  if (auth.response) return auth.response;
+  // Each search spends SerpApi quota (and a Gemini call).
+  const limited = await enforceRateLimits(
+    [{ key: `search:user:${auth.user.id}`, limit: 60, windowSeconds: 60 * 60 }],
+    'Llegaste al límite de búsquedas por ahora. Probá más tarde.'
+  );
+  if (limited) return limited;
+
   let isCancelled = false;
   request.signal.addEventListener('abort', () => { isCancelled = true; });
 
@@ -524,8 +217,8 @@ export async function POST(request: NextRequest): Promise<Response> {
       };
 
       try {
-        const body = (await request.json()) as { query?: string };
-        const rawQuery = (body.query ?? '').trim();
+        const body = (await request.json()) as { query?: unknown };
+        const rawQuery = typeof body.query === 'string' ? body.query.trim().slice(0, MAX_QUERY_LENGTH) : '';
 
         if (!rawQuery) {
           send({ type: 'error', message: 'La consulta no puede estar vacía.' });
@@ -533,27 +226,56 @@ export async function POST(request: NextRequest): Promise<Response> {
           return;
         }
 
-        if (!GEMINI_API_KEY) {
-          send({ type: 'error', message: 'No hay API key de Gemini configurada.' });
+        if (!isSearchConfigured()) {
+          send({
+            type: 'error',
+            message: 'La búsqueda no está configurada (falta SERPAPI_API_KEY).',
+          });
           controller.close();
           return;
         }
 
-        // Step 1: Parse
+        // Step 1: Parse (heuristic, instant, no quota)
         send({ type: 'status', status: 'parsing', message: 'Interpretando el pedido...' });
-        const parsedQuery = await parseQuery(rawQuery);
+        const parsedQuery = parseQueryHeuristic(rawQuery);
         if (isCancelled) { controller.close(); return; }
         send({ type: 'query', parsedQuery });
 
-        // Step 2: Search via Gemini + Google Search grounding
+        // Step 2: Search via SerpApi (site: filtered across portals)
         send({ type: 'status', status: 'searching', message: 'Buscando en portales inmobiliarios...' });
-        const rawListings = await searchWithGeminiGrounding(parsedQuery);
+        const rawListings = await searchListings(parsedQuery);
         if (isCancelled) { controller.close(); return; }
 
-        send({ type: 'status', status: 'evaluating', message: `Ponderando ${rawListings.length} resultados...` });
+        // Step 2b: Optional quality boost — classify "dueño directo" vs
+        // "inmobiliaria" with Gemini Flash Lite's free tier (one batched
+        // call, no retries). Falls back silently to the regex-based
+        // classification already in each listing if unconfigured or it fails.
+        const ownerTypes = await classifyOwnership(
+          rawListings.map((r) => ({ title: r.title, description: r.description }))
+        );
+        if (ownerTypes) {
+          rawListings.forEach((r, i) => { r.ownerType = ownerTypes[i]; });
+        }
+        if (isCancelled) { controller.close(); return; }
+
+        // A property an agency already has captured is useless to the agent
+        // regardless of how well it otherwise matches — that's a hard drop,
+        // not a ranking penalty. But most short Google snippets simply don't
+        // say either way, so "desconocido" isn't evidence of being
+        // agency-listed — only "inmobiliaria" is a confirmed one. Discarding
+        // "desconocido" too was tried and left zero results (the search
+        // query is intentionally broad — narrowing it to "dueño directo"
+        // text starves smaller portals of individual listings entirely,
+        // confirmed empirically), so unconfirmed ones are kept but scored
+        // lower (via scoreResult's condition dimension) instead of hidden.
+        const ownerFiltered = parsedQuery.ownerType === 'dueno-directo'
+          ? rawListings.filter((r) => r.ownerType !== 'inmobiliaria')
+          : rawListings;
+
+        send({ type: 'status', status: 'evaluating', message: `Ponderando ${ownerFiltered.length} resultados...` });
 
         // Step 3: Score
-        const scored: PropertySearchResult[] = rawListings
+        const scored: PropertySearchResult[] = ownerFiltered
           .filter((r) => r.title && r.url)
           .map((r): PropertySearchResult => {
             const breakdown = scoreResult(r, parsedQuery);
@@ -583,13 +305,8 @@ export async function POST(request: NextRequest): Promise<Response> {
 
         if (isCancelled) { controller.close(); return; }
 
-        // Step 4: Summaries
-        const top = scored.slice(0, 12);
-        const summaries = await generateBatchSummaries(top, parsedQuery);
-        if (isCancelled) { controller.close(); return; }
-
-        top.forEach((r, i) => { r.syntheticSummary = summaries[i] ?? heuristicSummary(r, parsedQuery); });
-        scored.slice(12).forEach((r) => { r.syntheticSummary = heuristicSummary(r, parsedQuery); });
+        // Step 4: Summaries (template-based)
+        scored.forEach((r) => { r.syntheticSummary = heuristicSummary(r, parsedQuery); });
 
         // Stream results
         for (const result of scored) {
@@ -600,9 +317,12 @@ export async function POST(request: NextRequest): Promise<Response> {
         send({ type: 'complete', totalResults: scored.length });
 
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Error inesperado en el pipeline';
+        // Upstream errors can carry internal detail: log it, show a generic message.
         console.error('[PropertyFinder] Error:', err);
-        send({ type: 'error', message: msg });
+        send({
+          type: 'error',
+          message: err instanceof SearchError ? err.message : 'No se pudo completar la búsqueda. Probá de nuevo.',
+        });
       } finally {
         try { controller.close(); } catch { /* already closed */ }
       }

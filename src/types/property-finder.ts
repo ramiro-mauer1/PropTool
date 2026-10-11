@@ -15,7 +15,7 @@ export type OperationType = 'alquiler' | 'venta' | 'alquiler-temporal';
 
 export type OwnerType = 'dueno-directo' | 'inmobiliaria' | 'cualquiera';
 
-export type Portal = 'MercadoLibre' | 'Zonaprop' | 'Argenprop' | 'Otro';
+export type Portal = 'MercadoLibre' | 'Zonaprop' | 'Argenprop' | 'Properati' | 'Icasas' | 'Otro';
 
 // ─── Query ──────────────────────────────────────────────────────────────────
 

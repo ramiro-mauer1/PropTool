@@ -9,6 +9,18 @@ const config: Config = {
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
+    // Se declara la lista completa (en vez de extenderla) para que `xs` quede
+    // ordenado antes que `sm` en la cascada. Distingue teléfonos chicos
+    // (iPhone SE) de teléfonos estándar: las etiquetas de texto de los botones
+    // sólo aparecen cuando realmente entran.
+    screens: {
+      xs: "420px",
+      sm: "640px",
+      md: "768px",
+      lg: "1024px",
+      xl: "1280px",
+      "2xl": "1536px",
+    },
     extend: {
       colors: {
         background: "var(--color-bg-base)",

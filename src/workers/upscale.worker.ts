@@ -14,6 +14,11 @@ import type {
   UpscaleWorkerResponse,
 } from "../types/enhance";
 
+// Intensidad del grano sintético inyectado tras la inferencia (ver injectAndScale).
+// Valor bajo a propósito: apenas rompe la uniformidad "plástica" de la GAN
+// sin volverse ruido visible en cielos, paredes y otras superficies lisas.
+const GRAIN_STRENGTH = 0.015;
+
 // Configuración determinista de rutas relativas para los binarios WASM
 const origin = typeof self !== "undefined" && self.location?.origin ? self.location.origin : "";
 ort.env.wasm.wasmPaths = origin ? `${origin}/` : "/";
@@ -116,19 +121,26 @@ async function processImage(imageId: string, file: File): Promise<void> {
     rawCtx.drawImage(bitmap, 0, 0);
     bitmap.close();
 
-    // 2. Calcular dimensiones adaptativas con tope de 2K (máx. 2048 px)
+    // 2. Calcular dimensiones adaptativas: cuánta resolución real ve el
+    // modelo (tope MAX_MODEL_INPUT_DIMENSION) vs. el tamaño final de entrega
+    // (tope MAX_OUTPUT_DIMENSION, aplicado como downscale DESPUÉS de la IA)
     const {
       inputWidth,
       inputHeight,
+      aiWidth,
+      aiHeight,
       targetWidth,
       targetHeight,
       isCapped,
     } = calculateAdaptiveDimensions(originalWidth, originalHeight);
 
+    const inputWasDownscaled = inputWidth < originalWidth || inputHeight < originalHeight;
+
     console.log(
-      `[UpscaleWorker] [Image: ${imageId}] Dimensiones de entrada calculadas: ` +
-      `Original=${originalWidth}x${originalHeight} -> Adaptativa=${inputWidth}x${inputHeight}, ` +
-      `Objetivo=${targetWidth}x${targetHeight} (Pre-escalado: ${isCapped ? "2K Optimizado" : "4x Directo"})`
+      `[UpscaleWorker] [Image: ${imageId}] Original=${originalWidth}x${originalHeight} -> ` +
+      `Entrada al modelo=${inputWidth}x${inputHeight}${inputWasDownscaled ? "" : " (nativa, sin achicar)"} -> ` +
+      `Salida IA=${aiWidth}x${aiHeight} -> Entrega=${targetWidth}x${targetHeight}` +
+      `${isCapped ? " (downscale final de alta calidad)" : ""}`
     );
 
     // Si la imagen requiere tope a 2K, redimensionar en canvas intermedio antes de la inferencia
@@ -160,7 +172,7 @@ async function processImage(imageId: string, file: File): Promise<void> {
       payload: { imageId, stage: "Preparando parches..." },
     } as UpscaleWorkerResponse);
 
-    // 4. Descomponer en tiles de 256x256 con 32px de solapamiento
+    // 4. Descomponer en tiles de TILE_SIZE×TILE_SIZE con 32px de solapamiento
     const tiles = computeUpscaleTiles(inputWidth, inputHeight);
     const totalTiles = tiles.length;
 
@@ -171,7 +183,7 @@ async function processImage(imageId: string, file: File): Promise<void> {
     // 5. Instanciar el acumulador de recomposición
     accumulator = new UpscaleAccumulator(inputWidth, inputHeight);
 
-    // Instanciar el sintetizador de textura (el tamaño máximo de tile es TILE_SIZE, típicamente 256)
+    // Instanciar el sintetizador de textura (el tamaño máximo de tile es TILE_SIZE)
     const textureSynth = new TextureSynthesizer(TILE_SIZE, TILE_SIZE);
 
     const inputName = session.inputNames[0] || "input";
@@ -233,9 +245,11 @@ async function processImage(imageId: string, file: File): Promise<void> {
 
       const outputData = outputTensor.data as Float32Array;
 
-      // Pasos 4 y 5: Escalar e inyectar grano procedural al output de ONNX
-      // Inyectamos grano sintético fotográfico de alta resolución (evita halos y bloques)
-      textureSynth.injectAndScale(outputData, tile.srcWidth, tile.srcHeight, SCALE_FACTOR, 0.08);
+      // Pasos 4 y 5: Escalar e inyectar grano procedural al output de ONNX.
+      // 0.08 (±8% por píxel) se veía como ruido/suciedad, no como grano
+      // fotográfico — GRAIN_STRENGTH baja apenas lo justo para quitar el
+      // aspecto "plástico" de la GAN sin ensuciar la imagen.
+      textureSynth.injectAndScale(outputData, tile.srcWidth, tile.srcHeight, SCALE_FACTOR, GRAIN_STRENGTH);
 
       // Generar máscara trapezoidal de pesos Hermite
       const weights = generateTileWeightMask(tile);
@@ -266,7 +280,7 @@ async function processImage(imageId: string, file: File): Promise<void> {
 
     // 7. Recomponer el ImageData final normalizado y escalado a [0, 255]
     console.log(
-      `[UpscaleWorker] [Image: ${imageId}] Recomponiendo imagen final en canvas ${targetWidth}x${targetHeight}...`
+      `[UpscaleWorker] [Image: ${imageId}] Recomponiendo salida cruda de la IA en canvas ${aiWidth}x${aiHeight}...`
     );
 
     self.postMessage({
@@ -278,15 +292,38 @@ async function processImage(imageId: string, file: File): Promise<void> {
     accumulator.dispose();
     accumulator = null;
 
-    // 8. Volcar en OffscreenCanvas y codificar a Blob PNG sin pérdidas
-    const outCanvas = new OffscreenCanvas(targetWidth, targetHeight);
-    const outCtx = outCanvas.getContext("2d") as OffscreenCanvasRenderingContext2D | null;
+    // 8. Volcar el resultado crudo de la IA (aiWidth x aiHeight) en un canvas
+    const aiCanvas = new OffscreenCanvas(aiWidth, aiHeight);
+    const aiCtx = aiCanvas.getContext("2d") as OffscreenCanvasRenderingContext2D | null;
 
-    if (!outCtx) {
-      throw new Error("No se pudo obtener el contexto 2D para el canvas de salida final.");
+    if (!aiCtx) {
+      throw new Error("No se pudo obtener el contexto 2D para el canvas de salida de la IA.");
     }
 
-    outCtx.putImageData(finalImageData, 0, 0);
+    aiCtx.putImageData(finalImageData, 0, 0);
+
+    // 9. Si el crudo de la IA supera el tope de entrega, reducirlo con un
+    // downscale de alta calidad — es detalle real generado por el modelo,
+    // no una alucinación desde una fuente borrosa, así que reducirlo se ve
+    // nítido en vez de "plástico".
+    let outCanvas: OffscreenCanvas;
+
+    if (targetWidth !== aiWidth || targetHeight !== aiHeight) {
+      console.log(
+        `[UpscaleWorker] [Image: ${imageId}] Downscale final de entrega: ${aiWidth}x${aiHeight} -> ${targetWidth}x${targetHeight}`
+      );
+      const finalCanvas = new OffscreenCanvas(targetWidth, targetHeight);
+      const finalCtx = finalCanvas.getContext("2d") as OffscreenCanvasRenderingContext2D | null;
+      if (!finalCtx) {
+        throw new Error("No se pudo obtener el contexto 2D para el canvas de downscale final.");
+      }
+      finalCtx.imageSmoothingEnabled = true;
+      finalCtx.imageSmoothingQuality = "high";
+      finalCtx.drawImage(aiCanvas, 0, 0, targetWidth, targetHeight);
+      outCanvas = finalCanvas;
+    } else {
+      outCanvas = aiCanvas;
+    }
 
     console.log(`[UpscaleWorker] [Image: ${imageId}] Generando Blob PNG sin pérdidas...`);
 

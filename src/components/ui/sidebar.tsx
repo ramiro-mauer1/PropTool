@@ -3,8 +3,7 @@
 import { cn } from "@/lib/utils";
 import Link, { LinkProps } from "next/link";
 import React, { useState, createContext, useContext } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { Menu, X } from "lucide-react";
+import { motion } from "framer-motion";
 
 export interface Links {
   label: string;
@@ -74,11 +73,16 @@ export const Sidebar = ({
   );
 };
 
-export const SidebarBody = (props: React.ComponentProps<typeof motion.div>) => {
+type SidebarBodyProps = React.ComponentProps<typeof motion.div> & {
+  /** Contenido de la barra superior en móvil (marca, acciones rápidas). */
+  mobileHeader?: React.ReactNode;
+};
+
+export const SidebarBody = ({ mobileHeader, ...props }: SidebarBodyProps) => {
   return (
     <>
       <DesktopSidebar {...props} />
-      <MobileSidebar {...(props as React.ComponentProps<"div">)} />
+      <MobileHeader mobileHeader={mobileHeader} />
     </>
   );
 };
@@ -94,7 +98,7 @@ export const DesktopSidebar = ({
       className={cn(
         "hidden md:block h-full flex-shrink-0 bg-[#0f1115] relative z-40"
       )}
-      style={{ 
+      style={{
         width: animate ? "64px" : "280px",
         minWidth: animate ? "64px" : "280px",
         maxWidth: animate ? "64px" : "280px"
@@ -123,55 +127,19 @@ export const DesktopSidebar = ({
   );
 };
 
-export const MobileSidebar = ({
-  className,
-  children,
+/** Barra superior en celular: sólo la marca. La navegación vive en la barra
+ *  inferior (BottomNavBar), así que ya no hay menú de tres rayas ni cajón. */
+export const MobileHeader = ({
+  mobileHeader,
   ...props
-}: React.ComponentProps<"div">) => {
-  const { open, setOpen } = useSidebar();
-  return (
-    <>
-      <div
-        className={cn(
-          "h-14 px-4 flex flex-row md:hidden items-center justify-between bg-[#0f1115] border-b border-white/[0.08] text-white w-full"
-        )}
-        {...props}
-      >
-        <div className="flex justify-end z-20 w-full">
-          <Menu
-            className="text-[#8f96a3] hover:text-white cursor-pointer"
-            onClick={() => setOpen(!open)}
-          />
-        </div>
-        <AnimatePresence>
-          {open && (
-            <motion.div
-              initial={{ x: "-100%", opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: "-100%", opacity: 0 }}
-              transition={{
-                duration: 0.45,
-                ease: [0.25, 1, 0.5, 1],
-              }}
-              className={cn(
-                "fixed h-full w-full inset-0 bg-[#0f1115] p-6 z-[100] flex flex-col justify-between text-white",
-                className
-              )}
-            >
-              <div
-                className="absolute right-6 top-6 z-50 text-[#8f96a3] hover:text-white cursor-pointer p-1 rounded-md hover:bg-white/[0.08]"
-                onClick={() => setOpen(!open)}
-              >
-                <X className="w-5 h-5" />
-              </div>
-              {children}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </>
-  );
-};
+}: React.ComponentProps<"header"> & { mobileHeader?: React.ReactNode }) => (
+  <header
+    className="h-14 shrink-0 px-safe flex flex-row md:hidden items-center gap-3 bg-[#0f1115] border-b border-white/[0.08] text-white w-full relative z-30"
+    {...props}
+  >
+    <div className="flex items-center min-w-0 flex-1">{mobileHeader}</div>
+  </header>
+);
 
 export const SidebarLink = ({
   link,
@@ -207,7 +175,7 @@ export const SidebarLink = ({
             link.active ? "text-white" : "text-[#8f96a3] group-hover/sidebar:text-white"
           )}
           style={{
-            pointerEvents: open ? "auto" : "none",
+            pointerEvents: animate && !open ? "none" : "auto",
           }}
         >
           {link.label}
@@ -226,7 +194,7 @@ export const SidebarLink = ({
           }}
           className="shrink-0 whitespace-nowrap"
           style={{
-            pointerEvents: open ? "auto" : "none",
+            pointerEvents: animate && !open ? "none" : "auto",
           }}
         >
           {link.badge}
@@ -236,7 +204,8 @@ export const SidebarLink = ({
   );
 
   const baseClasses = cn(
-    "flex items-center justify-start py-2 px-2.5 rounded-lg transition-all duration-150 group/sidebar cursor-pointer active:scale-[0.98]",
+    // 44px de alto mínimo en teléfonos: superficie táctil cómoda
+    "flex items-center justify-start py-2 min-h-[44px] md:min-h-0 px-2.5 rounded-lg transition-all duration-150 group/sidebar cursor-pointer active:scale-[0.98]",
     link.active
       ? "bg-transparent text-[#ffffff] font-medium border-l-[1.5px] border-[#d4ff32] rounded-none"
       : "text-[#8f96a3] hover:text-white hover:bg-white/[0.02]",
@@ -255,12 +224,11 @@ export const SidebarLink = ({
     );
   }
 
-  console.log("RENDERING LINK WITH HREF:", link.href, "FALLBACK:", link.href || "#");
-
   return (
     <Link
       href={link.href || "#"}
       className={baseClasses}
+      aria-current={link.active ? "page" : undefined}
       {...props}
     >
       {content}

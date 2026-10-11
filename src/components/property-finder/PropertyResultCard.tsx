@@ -16,7 +16,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { PropertySearchResult } from '@/types/property-finder';
+import type { PropertySearchResult, Portal } from '@/types/property-finder';
 
 interface PropertyResultCardProps {
   result: PropertySearchResult;
@@ -55,13 +55,17 @@ function MatchBadge({ score }: { score: number }) {
 
 // ─── Portal Badge ─────────────────────────────────────────────────────────────
 
-const PORTAL_COLORS: Record<string, string> = {
+const PORTAL_COLORS: Record<Portal, string> = {
   MercadoLibre:
     'bg-[rgba(255,230,0,0.12)] text-[#f5d800] border border-[rgba(245,216,0,0.25)]',
   Zonaprop:
     'bg-[rgba(0,160,255,0.1)] text-[#4db8ff] border border-[rgba(0,160,255,0.2)]',
   Argenprop:
     'bg-[rgba(255,100,0,0.1)] text-[#ff8040] border border-[rgba(255,100,0,0.2)]',
+  Properati:
+    'bg-[rgba(0,200,150,0.1)] text-[#00c896] border border-[rgba(0,200,150,0.2)]',
+  Icasas:
+    'bg-[rgba(190,60,255,0.1)] text-[#c27bff] border border-[rgba(190,60,255,0.2)]',
   Otro: 'bg-surface-raised text-secondary border border-border',
 };
 

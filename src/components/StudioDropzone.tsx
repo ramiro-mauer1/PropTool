@@ -1,21 +1,99 @@
 "use client";
 
 import React, { useState, useRef } from "react";
-import {
-  UploadCloud,
-  Sparkles,
-} from "lucide-react";
-import { motion } from "framer-motion";
+import { ImagePlus } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
 
 interface StudioDropzoneProps {
   onFilesSelected: (files: File[]) => void;
+  title?: string;
+  subtitle?: string;
+  /** Texto de la zona en escritorio y en teléfono (donde no se arrastra). */
+  dropLabel?: string;
+  mobileDropLabel?: string;
+  hint?: string;
+  ariaLabel?: string;
+  /** Contenido debajo de la zona de carga (avisos, accesos rápidos). */
+  children?: React.ReactNode;
+}
+
+const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
+const CLOSE_EASE: [number, number, number, number] = [0.65, 0, 0.35, 1];
+
+function filterImages(files: FileList): File[] {
+  return Array.from(files).filter((file) =>
+    file.type.match(/^image\/(jpeg|png|webp)$/)
+  );
+}
+
+// Sello del motor: arranca diciendo "Running on Plinth Engine" y, después de
+// un instante, "Running on" se pliega hacia "Plinth" y queda solo la marca.
+function EngineBadge() {
+  const reduceMotion = useReducedMotion();
+
+  return (
+    <div className="inline-flex items-center h-7 pl-2.5 pr-3 rounded-full border border-white/[0.09] bg-white/[0.03] text-[12px] leading-none select-none">
+      <span className="relative flex w-1.5 h-1.5 mr-2 shrink-0">
+        {!reduceMotion && (
+          <motion.span
+            className="absolute inset-0 rounded-full bg-[#d4ff32]"
+            initial={{ opacity: 0.6, scale: 1 }}
+            animate={{ opacity: 0, scale: 2.6 }}
+            transition={{ duration: 1.6, ease: "easeOut", repeat: 2, delay: 0.3 }}
+          />
+        )}
+        <span className="relative w-1.5 h-1.5 rounded-full bg-[#d4ff32]" />
+      </span>
+      {/* "Running on" queda quieto y el recorte se cierra desde la derecha:
+          "Plinth Engine" avanza sobre el texto como una puerta, sin
+          desvanecerlo. */}
+      <motion.span
+        aria-hidden="true"
+        className="overflow-hidden whitespace-nowrap text-[#8f96a3]"
+        initial={reduceMotion ? false : { width: "auto" }}
+        animate={{ width: 0 }}
+        transition={{ duration: 0.8, ease: CLOSE_EASE, delay: reduceMotion ? 0 : 2.2 }}
+      >
+        Running on&nbsp;
+      </motion.span>
+      <span className="font-medium text-[#e4e6ea] tracking-[-0.01em]">
+        Plinth Engine
+      </span>
+    </div>
+  );
+}
+
+// Marcas de encuadre en las esquinas, como en un visor de cámara.
+function CropMarks({ active }: { active: boolean }) {
+  const base =
+    "absolute w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]";
+  const color = active
+    ? "border-[#d4ff32]"
+    : "border-white/25 group-hover:border-white/45";
+  return (
+    <>
+      <span className={`${base} ${color} border-t border-l rounded-tl-md ${active ? "top-4 left-4" : "top-3 left-3"}`} />
+      <span className={`${base} ${color} border-t border-r rounded-tr-md ${active ? "top-4 right-4" : "top-3 right-3"}`} />
+      <span className={`${base} ${color} border-b border-l rounded-bl-md ${active ? "bottom-4 left-4" : "bottom-3 left-3"}`} />
+      <span className={`${base} ${color} border-b border-r rounded-br-md ${active ? "bottom-4 right-4" : "bottom-3 right-3"}`} />
+    </>
+  );
 }
 
 export function StudioDropzone({
   onFilesSelected,
+  title = "Estudio de Imagen & Retoque",
+  subtitle = "Sacá las marcas de agua de tus fotos y dejalas listas para publicar.",
+  dropLabel = "Arrastrá tus fotos acá",
+  mobileDropLabel = "Subí las fotos de la propiedad",
+  hint = "Podés subir varias a la vez.",
+  ariaLabel = "Elegir fotos para limpiar",
+  children,
 }: StudioDropzoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const openPicker = () => inputRef.current?.click();
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -24,6 +102,8 @@ export function StudioDropzone({
 
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
+    // Ignora el dragleave que dispara pasar por encima de un hijo.
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
     setIsDragging(false);
   };
 
@@ -31,29 +111,21 @@ export function StudioDropzone({
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const validFiles = Array.from(e.dataTransfer.files).filter((file) =>
-        file.type.match(/^image\/(jpeg|png|webp)$/)
-      );
-      if (validFiles.length > 0) {
-        onFilesSelected(validFiles);
-      }
+      const validFiles = filterImages(e.dataTransfer.files);
+      if (validFiles.length > 0) onFilesSelected(validFiles);
     }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const validFiles = Array.from(e.target.files).filter((file) =>
-        file.type.match(/^image\/(jpeg|png|webp)$/)
-      );
-      if (validFiles.length > 0) {
-        onFilesSelected(validFiles);
-      }
+      const validFiles = filterImages(e.target.files);
+      if (validFiles.length > 0) onFilesSelected(validFiles);
       e.target.value = "";
     }
   };
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-10 max-w-5xl mx-auto w-full overflow-y-auto">
+    <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 sm:p-10 max-w-3xl mx-auto w-full overflow-y-auto overscroll-contain">
       <input
         ref={inputRef}
         type="file"
@@ -63,66 +135,89 @@ export function StudioDropzone({
         onChange={handleInputChange}
       />
 
-      {/* Hero Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
+      <motion.header
+        initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25 }}
-        className="text-center mb-8 space-y-2.5"
+        transition={{ duration: 0.5, ease: EASE_OUT }}
+        className="flex flex-col items-center text-center mb-8 sm:mb-10 shrink-0"
       >
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#d4ff32]/10 border border-[#d4ff32]/20 text-xs font-medium text-[#d4ff32] mb-2 shadow-[0_0_12px_rgba(212,255,50,0.1)]">
-          <Sparkles className="w-3.5 h-3.5" />
-          <span className="font-semibold tracking-tight">Plinth Engine • 100% On-Device</span>
-        </div>
-
-        <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight text-white">
-          Estudio de Imagen & Retoque
+        <EngineBadge />
+        <h1 className="mt-6 text-[28px] sm:text-[40px] leading-[1.1] font-semibold tracking-[-0.03em] text-white text-balance">
+          {title}
         </h1>
-        <p className="text-sm sm:text-base text-[#8f96a3] max-w-2xl mx-auto font-medium">
-          Eliminá marcas de agua y potenciá la resolución fotográfica al instante.
-          Todo procesado con <span className="text-white font-semibold">latencia cero</span> dentro de tu equipo.
+        <p className="mt-3 text-[15px] sm:text-base leading-relaxed text-[#8f96a3] max-w-[52ch] text-balance">
+          {subtitle}
         </p>
-      </motion.div>
+      </motion.header>
 
-      {/* Main Dropzone Area */}
       <motion.div
-        initial={{ opacity: 0, scale: 0.98 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.3, delay: 0.05 }}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.55, ease: EASE_OUT, delay: 0.08 }}
+        role="button"
+        tabIndex={0}
+        aria-label={ariaLabel}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onClick={() => inputRef.current?.click()}
-        className={`w-full rounded-2xl border border-dashed p-8 sm:p-12 text-center cursor-pointer transition-all duration-200 group relative overflow-hidden active:scale-[0.99] ${
+        onClick={openPicker}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openPicker();
+          }
+        }}
+        className={`group relative w-full shrink-0 rounded-2xl border cursor-pointer outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-[#d4ff32]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#09090B] ${
           isDragging
-            ? "border-[#d4ff32] bg-[#d4ff32]/5 scale-[1.01] shadow-[0_0_24px_-6px_rgba(212,255,50,0.2)]"
-            : "border-white/10 bg-white/[0.02] hover:border-[#d4ff32]/50 hover:bg-white/[0.03] hover:shadow-[0_0_24px_-6px_rgba(212,255,50,0.15)]"
+            ? "border-[#d4ff32]/40 bg-[#d4ff32]/[0.04]"
+            : "border-white/[0.08] bg-[#0f1115] hover:border-white/[0.14] hover:bg-[#121419]"
         }`}
       >
-        <div className="flex flex-col items-center justify-center space-y-4 relative z-10">
-          <div className="w-16 h-16 rounded-2xl bg-[#d4ff32]/10 border border-[#d4ff32]/20 flex items-center justify-center group-hover:scale-105 transition-transform duration-200 shadow-[0_0_16px_rgba(212,255,50,0.15)]">
-            <UploadCloud className="w-8 h-8 text-[#d4ff32]" />
+        <CropMarks active={isDragging} />
+
+        <div className="relative flex flex-col items-center justify-center text-center px-6 py-12 sm:py-20">
+          <div
+            className={`w-12 h-12 rounded-xl border flex items-center justify-center transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+              isDragging
+                ? "border-[#d4ff32]/40 bg-[#d4ff32]/10 text-[#d4ff32] -translate-y-1"
+                : "border-white/[0.08] bg-white/[0.03] text-[#c6cad1] group-hover:-translate-y-0.5"
+            }`}
+          >
+            <ImagePlus className="w-5 h-5" strokeWidth={1.75} />
           </div>
 
-          <div className="space-y-1">
-            <p className="text-base sm:text-lg font-medium text-white tracking-tight">
-              Arrastrá y soltá tus imágenes aquí
-            </p>
-            <p className="text-xs sm:text-sm text-[#8f96a3]">
-              o hacé clic para explorar tus archivos
-            </p>
-          </div>
+          <p className="mt-5 text-base sm:text-lg font-medium tracking-[-0.01em] text-white">
+            {isDragging ? "Soltá para empezar" : (
+              <>
+                <span className="hidden sm:inline">{dropLabel}</span>
+                <span className="sm:hidden">{mobileDropLabel}</span>
+              </>
+            )}
+          </p>
+          <p className="mt-1.5 text-sm text-[#8f96a3]">{hint}</p>
 
-          <div className="flex flex-wrap items-center justify-center gap-2 pt-2 text-[10px] font-mono uppercase tracking-wider">
-            <span className="bg-white/5 border border-white/10 text-[#8f96a3] text-xs px-2.5 py-1 rounded-md">JPG</span>
-            <span className="bg-white/5 border border-white/10 text-[#8f96a3] text-xs px-2.5 py-1 rounded-md">PNG</span>
-            <span className="bg-white/5 border border-white/10 text-[#8f96a3] text-xs px-2.5 py-1 rounded-md">WEBP</span>
-            <span className="bg-white/5 border border-white/10 text-[#8f96a3] text-xs px-2.5 py-1 rounded-md">Procesamiento en lote</span>
-          </div>
+          <span
+            className={`mt-7 inline-flex items-center gap-2 h-11 sm:h-10 px-5 rounded-lg text-sm font-semibold transition-all duration-200 group-active:scale-[0.98] ${
+              isDragging
+                ? "bg-[#d4ff32]/20 text-[#d4ff32]"
+                : "bg-[#d4ff32] text-[#08090a] group-hover:bg-[#dfff5c]"
+            }`}
+          >
+            Elegir fotos
+          </span>
         </div>
       </motion.div>
 
-
+      {children && (
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: EASE_OUT, delay: 0.16 }}
+          className="w-full mt-3 shrink-0"
+        >
+          {children}
+        </motion.div>
+      )}
     </div>
   );
 }

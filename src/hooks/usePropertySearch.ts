@@ -61,7 +61,8 @@ export function usePropertySearch(): UsePropertySearchReturn {
         });
 
         if (!response.ok || !response.body) {
-          throw new Error(`Error del servidor: ${response.status}`);
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.error || `Error del servidor: ${response.status}`);
         }
 
         const reader = response.body.getReader();

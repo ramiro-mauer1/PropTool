@@ -198,7 +198,7 @@ export function PropertyFinderModule({
       )}
     >
       {/* ── Sticky Header ─────────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 border-b border-border bg-surface/80 backdrop-blur-sm px-6 py-4 space-y-3 z-10">
+      <div className="flex-shrink-0 border-b border-border bg-surface/80 backdrop-blur-sm px-3 sm:px-6 py-3 sm:py-4 space-y-3 z-10">
         {/* Title */}
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-subtle bg-accent-subtle border border-accent/20 flex items-center justify-center">
@@ -239,7 +239,7 @@ export function PropertyFinderModule({
       </div>
 
       {/* ── Results Area ──────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-6 py-5">
+      <div className="flex-1 overflow-y-auto overscroll-contain px-3 sm:px-6 py-4 sm:py-5">
         <AnimatePresence mode="wait">
           {/* Error */}
           {status === 'error' && error && (
@@ -264,7 +264,7 @@ export function PropertyFinderModule({
               key="results"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4"
+              className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4"
             >
               {results.map((result, i) => (
                 <PropertyResultCard
