@@ -6,6 +6,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   poweredByHeader: false,
+  // Every page is dynamic (CSP nonce, see app/layout.tsx), and for dynamic
+  // pages Next 15 streams metadata into <body>. Browsers only read the
+  // manifest and the apple-mobile-web-app-* tags from <head>, so streamed,
+  // the app installs as a plain browser shortcut. Matching every user agent
+  // keeps metadata blocking, in <head>.
+  htmlLimitedBots: /.*/,
   // There's a stray lockfile higher up (~/package-lock.json); pin the root.
   outputFileTracingRoot: __dirname,
   images: {
