@@ -36,7 +36,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Plinth - Real Estate OS",
+  title: "Plinth",
   applicationName: "Plinth",
   description: "Captaciones de propietarios directos para inmobiliarias",
   keywords: [
