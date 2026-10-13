@@ -14,9 +14,9 @@ export const TEXT_DET_MODEL_URL = "/models/text_det.onnx";
  */
 export const LAMA_MODEL_URL = "/models/lama_quantized.onnx";
 
-export const CLEANUP_UNAVAILABLE_TITLE = "Esta función todavía no está disponible";
+export const CLEANUP_UNAVAILABLE_TITLE = "Limpieza Inteligente está temporalmente desactivada";
 export const CLEANUP_UNAVAILABLE_MESSAGE =
-  "Estamos terminando de preparar la limpieza de marcas de agua. Mientras tanto, podés usar Mejora de Fotos.";
+  "Estamos terminando de preparar la limpieza de marcas de agua y vuelve pronto. Mientras tanto, podés usar Mejora de Fotos.";
 
 let lamaAvailable: Promise<boolean> | null = null;
 
