@@ -13,6 +13,9 @@ import { calculateAdaptiveDimensions } from "@/utils/tileProcessor";
 
 export const MAX_QUEUE_SIZE = 5;
 
+// El detalle técnico de un worker caído queda en la consola, no en pantalla.
+const UNEXPECTED_ERROR_MESSAGE = "Algo salió mal al mejorar la foto. Probá de nuevo.";
+
 interface UseEnhanceQueueOptions {
   onError?: (error: string) => void;
   onSuccess?: (message: string) => void;
@@ -126,7 +129,7 @@ export function useEnhanceQueue(options?: UseEnhanceQueueOptions) {
               ? {
                   ...item,
                   status: "error",
-                  error: e.message || "Error inesperado en Web Worker",
+                  error: UNEXPECTED_ERROR_MESSAGE,
                 }
               : item
           )
@@ -135,7 +138,7 @@ export function useEnhanceQueue(options?: UseEnhanceQueueOptions) {
       setIsProcessing(false);
       setCurrentProcessingId(null);
       if (options?.onError) {
-        options.onError(e.message || "Fallo crítico en Web Worker");
+        options.onError(UNEXPECTED_ERROR_MESSAGE);
       }
     };
 
@@ -247,7 +250,7 @@ export function useEnhanceQueue(options?: UseEnhanceQueueOptions) {
           }
 
           if (options?.onError) {
-            options.onError(`Error en Mejora de Fotos: ${error}`);
+            options.onError(error);
           }
 
           // Continuar con el siguiente en cola para no paralizar el lote

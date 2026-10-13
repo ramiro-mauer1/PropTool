@@ -4,6 +4,10 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type { BatchImage } from "@/types/batch";
 import type { WorkerResponse } from "@/workers/ai.worker";
 
+// El detalle técnico del worker queda en la consola, no en pantalla.
+const CLEANUP_FAILED_MESSAGE = "No pudimos limpiar las fotos. Probá de nuevo en unos minutos.";
+const RETOUCH_FAILED_MESSAGE = "No pudimos retocar la foto. Probá de nuevo en unos minutos.";
+
 interface BatchProcessorOptions {
   onError?: (error: string) => void;
 }
@@ -59,7 +63,7 @@ export function useBatchProcessor(options?: BatchProcessorOptions) {
           const errorMsg = (data as any).error || "Error desconocido";
           console.error("Worker Error:", errorMsg);
           if (options?.onError) {
-            options.onError("Error en el procesamiento IA: " + errorMsg);
+            options.onError(CLEANUP_FAILED_MESSAGE);
           }
           setIsProcessing(false);
           cleanupWorker();
@@ -124,7 +128,7 @@ export function useBatchProcessor(options?: BatchProcessorOptions) {
           const errorMsg = (data as any).error || "Error desconocido";
           console.error("Worker Error al reprocesar imagen:", errorMsg);
           if (options?.onError) {
-            options.onError("Error en el retoque IA: " + errorMsg);
+            options.onError(RETOUCH_FAILED_MESSAGE);
           }
           setIsProcessing(false);
           cleanupWorker();

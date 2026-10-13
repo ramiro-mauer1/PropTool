@@ -13,11 +13,26 @@ import type {
   UpscaleWorkerCommand,
   UpscaleWorkerResponse,
 } from "../types/enhance";
+import { UPSCALE_MODEL_URL } from "../lib/aiModels";
 
 // Intensidad del grano sintético inyectado tras la inferencia (ver injectAndScale).
 // Valor bajo a propósito: apenas rompe la uniformidad "plástica" de la GAN
 // sin volverse ruido visible en cielos, paredes y otras superficies lisas.
 const GRAIN_STRENGTH = 0.015;
+
+// Lo que ve el usuario. El detalle técnico (rutas, mensajes de ONNX) queda
+// solo en la consola.
+const MODEL_LOAD_FAILED_MESSAGE =
+  "No pudimos preparar la mejora de fotos. Revisá tu conexión y probá de nuevo en unos minutos.";
+const PROCESSING_FAILED_MESSAGE =
+  "No pudimos mejorar esta foto. Probá de nuevo o con otra imagen.";
+
+/** Error con un mensaje apto para mostrarle al usuario tal cual. */
+class UserFacingError extends Error {}
+
+function userMessageFor(error: unknown): string {
+  return error instanceof UserFacingError ? error.message : PROCESSING_FAILED_MESSAGE;
+}
 
 // Configuración determinista de rutas relativas para los binarios WASM
 const origin = typeof self !== "undefined" && self.location?.origin ? self.location.origin : "";
@@ -44,7 +59,7 @@ async function getUpscaleSession(): Promise<ort.InferenceSession> {
 
   if (!sessionLoadingPromise) {
     sessionLoadingPromise = (async () => {
-      const modelPath = "/models/realesr-general-x4v3.onnx";
+      const modelPath = UPSCALE_MODEL_URL;
       console.log(`[UpscaleWorker] Iniciando carga de archivo ONNX desde '${modelPath}' con backend WASM multihilo...`);
 
       try {
@@ -57,12 +72,11 @@ async function getUpscaleSession(): Promise<ort.InferenceSession> {
         return session;
       } catch (wasmError) {
         sessionLoadingPromise = null;
-        const msg = wasmError instanceof Error ? wasmError.message : String(wasmError);
-        console.error(`[UpscaleWorker] Error critico al instanciar sesion ONNX con WASM:`, wasmError);
-        throw new Error(
-          `No se pudo cargar el modelo Real-ESRGAN desde '${modelPath}'. ` +
-          `Verifica que el archivo exista en public/models/realesr-general-x4v3.onnx. Detalle: ${msg}`
+        console.error(
+          `[UpscaleWorker] No se pudo cargar el modelo Real-ESRGAN desde '${modelPath}':`,
+          wasmError
         );
+        throw new UserFacingError(MODEL_LOAD_FAILED_MESSAGE);
       }
     })();
   }
@@ -353,14 +367,13 @@ async function processImage(imageId: string, file: File): Promise<void> {
       accumulator = null;
     }
 
-    const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[UpscaleWorker] [Image: ${imageId}] Error en el pipeline:`, error);
 
     self.postMessage({
       type: "ERROR",
       payload: {
         imageId,
-        error: errorMsg,
+        error: userMessageFor(error),
       },
     } as UpscaleWorkerResponse);
   } finally {
@@ -384,11 +397,10 @@ self.addEventListener("message", async (event: MessageEvent<UpscaleWorkerCommand
           await getUpscaleSession();
           self.postMessage({ type: "MODEL_LOADED" } as UpscaleWorkerResponse);
         } catch (err) {
-          const errorMsg = err instanceof Error ? err.message : String(err);
           console.error(`[UpscaleWorker] Fallo en warmup de modelo:`, err);
           self.postMessage({
             type: "ERROR",
-            payload: { error: errorMsg },
+            payload: { error: userMessageFor(err) },
           } as UpscaleWorkerResponse);
         }
         break;
@@ -407,11 +419,10 @@ self.addEventListener("message", async (event: MessageEvent<UpscaleWorkerCommand
       }
     }
   } catch (globalError) {
-    const errorMsg = globalError instanceof Error ? globalError.message : String(globalError);
     console.error(`[UpscaleWorker] Error no capturado en message event:`, globalError);
     self.postMessage({
       type: "ERROR",
-      payload: { error: errorMsg },
+      payload: { error: userMessageFor(globalError) },
     } as UpscaleWorkerResponse);
   }
 });

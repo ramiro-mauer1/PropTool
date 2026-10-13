@@ -14,6 +14,7 @@ import {
   stitchTile,
   tileMaskHasContent,
 } from "../utils/imagePatching";
+import { LAMA_MODEL_URL } from "../lib/aiModels";
 
 export type WorkerCommand = {
   type: "START_BATCH";
@@ -50,7 +51,7 @@ async function getLaMaSession() {
     // FASE 5 FIX: Forzamos WASM. 
     // WebGPU no soporta actualmente las capas FFC (Fast Fourier Convolution) de LaMa, 
     // lo que causa crashes en las operaciones Add en el dominio espectral.
-    lamaSession = await InferenceSession.create("/models/lama_quantized.onnx", {
+    lamaSession = await InferenceSession.create(LAMA_MODEL_URL, {
       executionProviders: ["wasm"],
     });
   }

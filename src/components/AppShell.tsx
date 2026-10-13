@@ -18,6 +18,11 @@ import { ProfileMenu, ProfileAvatar, LoginView, WelcomeFlow, AccountSheet } from
 import { APP_SECTIONS, isSectionActive, startHref } from "@/components/appSections";
 import { BatchImage, WatermarkBBox } from "@/types/batch";
 import { detectWatermarkBox, createMaskFromBBox } from "@/utils/textDetector";
+import {
+  isLamaModelAvailable,
+  CLEANUP_UNAVAILABLE_MESSAGE,
+  CLEANUP_UNAVAILABLE_TITLE,
+} from "@/lib/aiModels";
 import { downloadResult, useDeviceSettings } from "@/lib/settings";
 
 /**
@@ -257,6 +262,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [processedIds, cleanUrls, images]);
 
   const handleProcessBatch = useCallback(async () => {
+    if (!(await isLamaModelAvailable())) {
+      showToast({
+        title: CLEANUP_UNAVAILABLE_TITLE,
+        message: CLEANUP_UNAVAILABLE_MESSAGE,
+        type: "info",
+      });
+      return;
+    }
+
     let currentImages = images;
 
     const unmasked = currentImages.filter(
