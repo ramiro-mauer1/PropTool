@@ -39,8 +39,11 @@ supabase/.temp
 *.tsbuildinfo
 next-env.d.ts
 
-# onnx models
+# onnx models: the small ones ship with the app; LaMa (~208 MB) is over
+# GitHub's 100 MB per-file limit and stays out (see src/lib/aiModels.ts).
 public/models/*.onnx
+!public/models/realesr-general-x4v3.onnx
+!public/models/text_det.onnx
 
 
 # local data samples & tooling

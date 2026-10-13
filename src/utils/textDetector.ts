@@ -1,5 +1,6 @@
 import { InferenceSession, Tensor, env } from "onnxruntime-web";
 import { WatermarkBBox } from "@/types/batch";
+import { TEXT_DET_MODEL_URL } from "@/lib/aiModels";
 
 // Configuración global de rutas WebAssembly para onnxruntime-web
 if (typeof window !== "undefined") {
@@ -30,15 +31,15 @@ async function getTextSession(): Promise<InferenceSession | null> {
 
   textSessionPromise = (async () => {
     try {
-      console.log("[textDetector] Cargando modelo ONNX /models/text_det.onnx...");
-      const session = await InferenceSession.create("/models/text_det.onnx", {
+      console.log(`[textDetector] Cargando modelo ONNX ${TEXT_DET_MODEL_URL}...`);
+      const session = await InferenceSession.create(TEXT_DET_MODEL_URL, {
         executionProviders: ["wasm"],
       });
-      console.log("[textDetector] Modelo /models/text_det.onnx cargado exitosamente.");
+      console.log(`[textDetector] Modelo ${TEXT_DET_MODEL_URL} cargado exitosamente.`);
       textSession = session;
       return session;
     } catch (error) {
-      console.error("[textDetector] Error cargando /models/text_det.onnx:", error);
+      console.error(`[textDetector] Error cargando ${TEXT_DET_MODEL_URL}:`, error);
       return null;
     } finally {
       textSessionPromise = null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Upload,
   Download,
@@ -11,12 +11,18 @@ import {
   FolderSync,
   ChevronLeft,
   MoreHorizontal,
+  Info,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BatchProgress } from "@/components/BatchProgress";
 import { ImageGallery } from "@/components/ui/carousel-circular-image-gallery";
 import { StudioDropzone } from "@/components/StudioDropzone";
 import { useWorkspace } from "@/components/AppShell";
+import {
+  isLamaModelAvailable,
+  CLEANUP_UNAVAILABLE_MESSAGE,
+  CLEANUP_UNAVAILABLE_TITLE,
+} from "@/lib/aiModels";
 
 /** Sección Limpieza Inteligente: barra del lote, dropzone y carrusel. */
 export function LimpiezaWorkspace() {
@@ -39,6 +45,18 @@ export function LimpiezaWorkspace() {
   // Menú de acciones secundarias del lote (sólo móvil: en escritorio los
   // botones entran todos en la barra).
   const [batchMenuOpen, setBatchMenuOpen] = useState(false);
+  // null mientras se comprueba; false si el modelo de limpieza no está publicado.
+  const [modelAvailable, setModelAvailable] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void isLamaModelAvailable().then((ok) => {
+      if (active) setModelAvailable(ok);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const triggerUpload = () => fileInputRef.current?.click();
   const pendingCount = images.length - processedIds.length;
@@ -122,7 +140,7 @@ export function LimpiezaWorkspace() {
             <button
               type="button"
               onClick={processBatch}
-              disabled={isProcessing || isAllProcessed}
+              disabled={isProcessing || isAllProcessed || modelAvailable === false}
               className={`flex items-center justify-center gap-1.5 h-9 sm:h-8 px-3 sm:px-4 rounded-md text-xs font-semibold shadow-2xs transition-all active:scale-[0.98] ${
                 isProcessing
                   ? "bg-accent/80 text-zinc-950 cursor-wait"
@@ -131,7 +149,9 @@ export function LimpiezaWorkspace() {
                   : "bg-accent text-zinc-950 hover:bg-accent-hover shadow-subtle"
               }`}
               title={
-                isAllProcessed
+                modelAvailable === false
+                  ? CLEANUP_UNAVAILABLE_TITLE
+                  : isAllProcessed
                   ? "Todas las fotografías del lote ya están limpias"
                   : isProcessing
                   ? "Procesando fotografías..."
@@ -294,6 +314,23 @@ export function LimpiezaWorkspace() {
                 )}
               </AnimatePresence>
             </div>
+          </div>
+        </div>
+      )}
+
+      {modelAvailable === false && (
+        <div
+          role="status"
+          className="mx-3 sm:mx-6 mt-3 flex items-start gap-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-[#27272A] px-4 py-3 shrink-0"
+        >
+          <Info className="w-4 h-4 mt-0.5 shrink-0 text-accent" />
+          <div className="text-sm">
+            <p className="font-semibold text-[#18181B] dark:text-[#FAFAFA]">
+              {CLEANUP_UNAVAILABLE_TITLE}
+            </p>
+            <p className="mt-0.5 text-zinc-600 dark:text-zinc-400">
+              {CLEANUP_UNAVAILABLE_MESSAGE}
+            </p>
           </div>
         </div>
       )}
