@@ -18,6 +18,7 @@ import { ProfileMenu, ProfileAvatar, LoginView, WelcomeFlow, AccountSheet } from
 import { APP_SECTIONS, isSectionActive, startHref } from "@/components/appSections";
 import { BatchImage, WatermarkBBox } from "@/types/batch";
 import { detectWatermarkBox, createMaskFromBBox } from "@/utils/textDetector";
+import { useCleanupAvailable } from "@/hooks/useCleanupAvailable";
 import {
   isLamaModelAvailable,
   CLEANUP_UNAVAILABLE_MESSAGE,
@@ -357,6 +358,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }));
   }, [images, cleanUrls, processedIds]);
 
+  const cleanupAvailable = useCleanupAvailable();
+
   // Pendientes por sección: badge en la barra lateral, punto en la inferior.
   const sectionCounts: Partial<Record<string, number>> = {
     inpainting: images.length,
@@ -367,6 +370,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const sidebarLinks: Links[] = APP_SECTIONS.map((section) => {
     const Icon = section.icon;
     const count = sectionCounts[section.module] ?? 0;
+    if (section.module === "inpainting" && cleanupAvailable === false) {
+      return {
+        label: section.label,
+        href: section.href,
+        active: isSectionActive(section, pathname),
+        icon: <Icon className="w-5 h-5 flex-shrink-0" />,
+        badge: (
+          <span
+            title={CLEANUP_UNAVAILABLE_TITLE}
+            className="text-2xs px-2 py-0.5 rounded-full border border-white/15 text-[#8f96a3] font-medium"
+          >
+            Pausada
+          </span>
+        ),
+      };
+    }
     return {
       label: section.label,
       href: section.href,

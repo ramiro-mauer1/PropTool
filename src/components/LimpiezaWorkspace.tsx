@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import Link from "next/link";
 import {
   Upload,
   Download,
@@ -12,17 +13,16 @@ import {
   ChevronLeft,
   MoreHorizontal,
   Info,
+  PauseCircle,
+  ArrowRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BatchProgress } from "@/components/BatchProgress";
 import { ImageGallery } from "@/components/ui/carousel-circular-image-gallery";
 import { StudioDropzone } from "@/components/StudioDropzone";
 import { useWorkspace } from "@/components/AppShell";
-import {
-  isLamaModelAvailable,
-  CLEANUP_UNAVAILABLE_MESSAGE,
-  CLEANUP_UNAVAILABLE_TITLE,
-} from "@/lib/aiModels";
+import { useCleanupAvailable } from "@/hooks/useCleanupAvailable";
+import { CLEANUP_UNAVAILABLE_MESSAGE, CLEANUP_UNAVAILABLE_TITLE } from "@/lib/aiModels";
 
 /** Sección Limpieza Inteligente: barra del lote, dropzone y carrusel. */
 export function LimpiezaWorkspace() {
@@ -46,17 +46,7 @@ export function LimpiezaWorkspace() {
   // botones entran todos en la barra).
   const [batchMenuOpen, setBatchMenuOpen] = useState(false);
   // null mientras se comprueba; false si el modelo de limpieza no está publicado.
-  const [modelAvailable, setModelAvailable] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    void isLamaModelAvailable().then((ok) => {
-      if (active) setModelAvailable(ok);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
+  const modelAvailable = useCleanupAvailable();
 
   const triggerUpload = () => fileInputRef.current?.click();
   const pendingCount = images.length - processedIds.length;
@@ -318,7 +308,7 @@ export function LimpiezaWorkspace() {
         </div>
       )}
 
-      {modelAvailable === false && (
+      {modelAvailable === false && images.length > 0 && (
         <div
           role="status"
           className="mx-3 sm:mx-6 mt-3 flex items-start gap-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-[#27272A] px-4 py-3 shrink-0"
@@ -335,7 +325,9 @@ export function LimpiezaWorkspace() {
         </div>
       )}
 
-      {images.length === 0 ? (
+      {images.length === 0 && modelAvailable === false ? (
+        <CleanupDisabledNotice />
+      ) : images.length === 0 ? (
         <StudioDropzone onFilesSelected={addImages} />
       ) : (
         <div className="flex-1 flex flex-col p-2 sm:p-4 overflow-hidden">
@@ -370,5 +362,32 @@ export function LimpiezaWorkspace() {
         </div>
       )}
     </>
+  );
+}
+
+/** Reemplaza al dropzone mientras Limpieza está desactivada: no tiene sentido subir fotos. */
+function CleanupDisabledNotice() {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 sm:p-10 overflow-y-auto">
+      <div
+        role="status"
+        className="w-full max-w-md rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-[#18181B] p-6 sm:p-8 text-center"
+      >
+        <PauseCircle className="w-10 h-10 mx-auto text-accent" />
+        <h2 className="mt-4 text-lg font-semibold text-[#18181B] dark:text-[#FAFAFA] text-balance">
+          {CLEANUP_UNAVAILABLE_TITLE}
+        </h2>
+        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400 text-pretty">
+          {CLEANUP_UNAVAILABLE_MESSAGE}
+        </p>
+        <Link
+          href="/fotos"
+          className="mt-6 inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-md bg-accent text-zinc-950 hover:bg-accent-hover text-sm font-semibold transition-colors active:scale-[0.98]"
+        >
+          Ir a Mejora de Fotos
+          <ArrowRight className="w-4 h-4" />
+        </Link>
+      </div>
+    </div>
   );
 }
