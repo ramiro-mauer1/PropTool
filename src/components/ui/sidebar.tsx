@@ -227,6 +227,9 @@ export const SidebarLink = ({
   return (
     <Link
       href={link.href || "#"}
+      // Las secciones son rutas dinámicas: sin prefetch completo, cada clic
+      // espera un viaje al servidor antes de cambiar de pantalla.
+      prefetch={link.href ? true : undefined}
       className={baseClasses}
       aria-current={link.active ? "page" : undefined}
       {...props}

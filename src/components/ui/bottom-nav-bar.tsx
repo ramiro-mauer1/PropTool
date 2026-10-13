@@ -71,6 +71,8 @@ export function BottomNavBar({ items, account, className }: BottomNavBarProps) {
           <Link
             key={item.href}
             href={item.href}
+            // Prefetch completo: ver el comentario en ui/sidebar.tsx.
+            prefetch
             aria-current={active ? "page" : undefined}
             aria-label={pending ? `${item.label} (${item.count})` : item.label}
             className="relative shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#d4ff32]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1115]"
