@@ -22,6 +22,17 @@ const nextConfig = {
       },
     ],
   },
+  experimental: {
+    // Cuánto reutiliza el navegador una sección ya cargada antes de volver a
+    // pedirla al servidor. Las secciones no traen datos del servidor (todo se
+    // carga en el cliente), así que reusarlas es seguro; sin esto, Next 15
+    // vuelve al servidor en cada cambio de pestaña. Cerrar sesión recarga la
+    // página entera y vacía este caché.
+    staleTimes: {
+      dynamic: 300,
+      static: 600,
+    },
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },
