@@ -1,91 +1,325 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, ArrowRight, Loader2, Maximize2, Monitor, Moon, Radar, Sun, Users, Wand2 } from 'lucide-react';
+import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Loader2,
+  Maximize2,
+  MessageCircle,
+  Mic,
+  Radar,
+  Users,
+  Wand2,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PlinthBrand } from '@/components/PlinthBrand';
 import type { AuthUser } from '@/hooks/useAuthUser';
-import { updateSettings, readSettings, type ThemePreference } from '@/lib/settings';
-import {
-  MESSAGE_TONE_LABELS,
-  START_MODULE_LABELS,
-  type MessageTone,
-  type StartModule,
-} from '@/lib/userPreferences';
+import { useCleanupAvailable } from '@/hooks/useCleanupAvailable';
+import { START_MODULE_LABELS, type StartModule } from '@/lib/userPreferences';
 
 interface WelcomeFlowProps {
   user: AuthUser;
   /** Se llama después de guardar (u omitir), con el módulo elegido para abrir. */
   onDone: (startModule: StartModule | null) => void;
+  /** Repetida desde Configuración: el nombre ya está y "Omitir" pasa a "Cerrar". */
+  replay?: boolean;
 }
 
-const START_MODULE_META: Record<StartModule, { icon: ReactNode; hint: string }> = {
-  captaciones: { icon: <Radar className="w-4 h-4" />, hint: 'Dueños que venden solos' },
-  crm: { icon: <Users className="w-4 h-4" />, hint: 'Seguimiento de tus clientes' },
-  inpainting: { icon: <Wand2 className="w-4 h-4" />, hint: 'Sacar marcas de agua' },
-  enhance: { icon: <Maximize2 className="w-4 h-4" />, hint: 'Subir la calidad de fotos' },
-};
+/** Evento con el que Configuración pide volver a ver la bienvenida (lo escucha AppShell). */
+export const REPLAY_WELCOME_EVENT = 'plinth:replay-welcome';
 
-const THEME_OPTIONS: { value: ThemePreference; label: string; icon: ReactNode }[] = [
-  { value: 'dark', label: 'Oscuro', icon: <Moon className="w-4 h-4" /> },
-  { value: 'light', label: 'Claro', icon: <Sun className="w-4 h-4" /> },
-  { value: 'system', label: 'Sistema', icon: <Monitor className="w-4 h-4" /> },
-];
-
-const TOTAL_STEPS = 4;
+const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
 const inputClass =
-  'w-full rounded-subtle border border-[#27272A] bg-[#09090B] px-3 py-2 text-sm text-white placeholder:text-[#5b616d] focus:outline-none focus:ring-1 focus:ring-[#d4ff32]';
-const labelClass = 'text-2xs font-semibold text-[#8f96a3] uppercase tracking-wide';
+  'w-full h-12 rounded-lg border border-[#27272A] bg-[#09090B] px-4 text-base text-white placeholder:text-[#5b616d] caret-[#d4ff32] selection:bg-[#d4ff32]/30 focus:outline-none focus:border-[#d4ff32]/60 focus:ring-1 focus:ring-[#d4ff32]/60 transition-colors';
+const primaryButton =
+  'flex items-center justify-center gap-1.5 h-11 px-5 rounded-lg bg-[#d4ff32] text-zinc-950 text-sm font-semibold hover:bg-[#c2ef1f] transition-colors active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4ff32]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1115]';
+const quietButton =
+  'flex items-center gap-1.5 h-11 px-2 text-sm font-medium text-[#8f96a3] hover:text-white transition-colors disabled:opacity-40 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4ff32]/50';
 
-function OptionCard({
-  selected,
-  onClick,
-  children,
-}: {
-  selected: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
+/* ──────────────────────────────────────────────────────────────────────────
+ * Plinth habla: sus frases aparecen palabra por palabra, como si las
+ * estuviera escribiendo. Es el único movimiento protagonista del flujo.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+function PlinthSays({ lines, delay = 0 }: { lines: string[]; delay?: number }) {
+  const reduce = useReducedMotion();
+  let wordIndex = 0;
   return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      onClick={onClick}
-      className={cn(
-        'w-full text-left rounded-lg border p-3 transition-colors',
-        selected
-          ? 'border-[#d4ff32]/60 bg-[#d4ff32]/[0.06]'
-          : 'border-[#27272A] hover:border-[#3f3f46] bg-[#09090B]'
-      )}
-    >
-      {children}
-    </button>
+    <div className="flex items-start gap-3">
+      <div
+        aria-hidden
+        className="mt-0.5 h-9 w-9 shrink-0 rounded-xl border border-white/[0.08] bg-[#18181B] flex items-center justify-center"
+      >
+        <PlinthBrand isCollapsed className="h-[18px] text-white" />
+      </div>
+      <div className="min-w-0 space-y-2 pt-0.5">
+        {lines.map((line, li) => (
+          <p
+            key={li}
+            className={cn(
+              'text-pretty leading-snug',
+              li === 0 ? 'text-xl sm:text-[22px] font-semibold text-white tracking-[-0.01em]' : 'text-[15px] text-[#b4b9c2]'
+            )}
+          >
+            {line.split(' ').map((word, wi) => {
+              const i = wordIndex++;
+              return (
+                <motion.span
+                  key={wi}
+                  className="inline-block whitespace-pre"
+                  initial={reduce ? false : { opacity: 0, y: 4, filter: 'blur(4px)' }}
+                  animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                  transition={{ duration: 0.35, ease: EASE_OUT, delay: delay + i * 0.035 }}
+                >
+                  {word}
+                  {wi < line.split(' ').length - 1 ? ' ' : ''}
+                </motion.span>
+              );
+            })}
+          </p>
+        ))}
+      </div>
+    </div>
   );
 }
 
-export function WelcomeFlow({ user, onDone }: WelcomeFlowProps) {
+const MODULE_ICONS: Record<StartModule, ReactNode> = {
+  captaciones: <Radar className="h-3.5 w-3.5" />,
+  crm: <Users className="h-3.5 w-3.5" />,
+  enhance: <Maximize2 className="h-3.5 w-3.5" />,
+  inpainting: <Wand2 className="h-3.5 w-3.5" />,
+};
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Recorrido: cada sección con una escena chica de cómo se ve en la app.
+ * Los datos de las escenas son ejemplos y lo dicen.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** Marco de cada escena: la sección como barra de ventana, y aclarado que es un ejemplo. */
+function Scene({ module, children }: { module: StartModule; children: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-white/[0.06] bg-[#09090B]">
+      <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] px-3.5 py-2">
+        <span className="flex items-center gap-1.5 text-xs font-medium text-[#d4d4d8]">
+          <span className="text-[#d4ff32]">{MODULE_ICONS[module]}</span>
+          {START_MODULE_LABELS[module]}
+        </span>
+        <span className="text-[10px] font-medium uppercase tracking-wider text-[#5b616d]">Ejemplo</span>
+      </div>
+      <div className="p-3.5">{children}</div>
+    </div>
+  );
+}
+
+function CaptacionesScene() {
+  return (
+    <Scene module="captaciones">
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-[#d4ff32]/10 px-2 py-0.5 text-[11px] font-semibold text-[#d4ff32]">
+            Dueño directo
+          </span>
+          <span className="text-xs text-[#8f96a3]">Castelar · 3 ambientes</span>
+        </div>
+        <p className="text-sm text-white leading-snug">
+          <span className="text-[#8f96a3]">Por qué vale la pena:</span> bajó el precio hace 4 días y publica sin
+          inmobiliaria.
+        </p>
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-[#0f1115] px-3 py-2">
+          <span className="truncate text-xs text-[#b4b9c2]">“Hola Carlos, vi tu casa en Castelar…”</span>
+          <span className="flex shrink-0 items-center gap-1 text-xs font-semibold text-[#d4ff32]">
+            <MessageCircle className="h-3.5 w-3.5" />
+            WhatsApp
+          </span>
+        </div>
+      </div>
+    </Scene>
+  );
+}
+
+function CarteraScene() {
+  const reduce = useReducedMotion();
+  const rows = ['Charla guardada con Marta', 'Tarea: confirmar la visita del sábado', 'Mensaje sugerido, listo para mandar'];
+  return (
+    <Scene module="crm">
+      <div className="space-y-3">
+        <div className="ml-auto flex w-fit max-w-[90%] items-start gap-2 rounded-2xl rounded-br-md bg-[#27272A] px-3 py-2">
+          <Mic className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#8f96a3]" />
+          <p className="text-sm text-white leading-snug">Hablé con Marta, quiere ver el depto el sábado.</p>
+        </div>
+        <ul className="space-y-1.5">
+          {rows.map((row, i) => (
+            <motion.li
+              key={row}
+              initial={reduce ? false : { opacity: 0, x: -6 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3, ease: EASE_OUT, delay: 0.5 + i * 0.12 }}
+              className="flex items-center gap-2 text-sm text-[#d4d4d8]"
+            >
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#d4ff32]/15">
+                <Check className="h-2.5 w-2.5 text-[#d4ff32]" strokeWidth={3} />
+              </span>
+              {row}
+            </motion.li>
+          ))}
+        </ul>
+      </div>
+    </Scene>
+  );
+}
+
+/** Una fachada simple dibujada; la mitad "antes" va borrosa. */
+function Facade() {
+  return (
+    <svg viewBox="0 0 240 120" className="h-full w-full" aria-hidden>
+      <rect width="240" height="120" fill="#1c1f26" />
+      <rect y="92" width="240" height="28" fill="#15171c" />
+      <polygon points="60,40 120,12 180,40" fill="#3a3f4b" />
+      <rect x="66" y="40" width="108" height="56" fill="#2a2e37" />
+      <rect x="78" y="52" width="24" height="20" rx="1" fill="#d4ff32" opacity="0.55" />
+      <rect x="138" y="52" width="24" height="20" rx="1" fill="#d4ff32" opacity="0.55" />
+      <rect x="110" y="64" width="20" height="32" rx="1" fill="#14161a" />
+      <rect x="18" y="58" width="10" height="38" fill="#2e3b2a" />
+      <circle cx="23" cy="52" r="14" fill="#3b4d35" />
+      <circle cx="214" cy="56" r="12" fill="#3b4d35" />
+      <rect x="210" y="62" width="8" height="34" fill="#2e3b2a" />
+    </svg>
+  );
+}
+
+function FotosScene() {
+  const reduce = useReducedMotion();
+  return (
+    <Scene module="enhance">
+      <div className="relative h-32 overflow-hidden rounded-lg">
+        <div className="absolute inset-0 [filter:blur(2.5px)_saturate(0.6)] scale-105">
+          <Facade />
+        </div>
+        <motion.div
+          className="absolute inset-0"
+          initial={reduce ? false : { clipPath: 'inset(0 0 0 100%)' }}
+          animate={{ clipPath: 'inset(0 0 0 50%)' }}
+          transition={{ duration: 0.9, ease: EASE_OUT, delay: 0.4 }}
+        >
+          <Facade />
+        </motion.div>
+        <motion.div
+          className="absolute inset-y-0 w-px bg-white/80"
+          initial={reduce ? false : { left: '100%' }}
+          animate={{ left: '50%' }}
+          transition={{ duration: 0.9, ease: EASE_OUT, delay: 0.4 }}
+        />
+        <span className="absolute left-2 bottom-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+          Antes
+        </span>
+        <span className="absolute right-2 bottom-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-[#d4ff32]">
+          Después
+        </span>
+      </div>
+    </Scene>
+  );
+}
+
+function LimpiezaScene() {
+  const reduce = useReducedMotion();
+  return (
+    <Scene module="inpainting">
+      <div className="relative h-32 overflow-hidden rounded-lg">
+        <Facade />
+        <motion.span
+          className="absolute inset-0 flex items-center justify-center text-2xl font-bold tracking-[0.2em] text-white/40 -rotate-12 select-none"
+          initial={reduce ? false : { opacity: 1 }}
+          animate={{ opacity: 0, filter: 'blur(6px)' }}
+          transition={{ duration: 0.8, ease: EASE_OUT, delay: 0.9 }}
+        >
+          MARCA DE AGUA
+        </motion.span>
+      </div>
+    </Scene>
+  );
+}
+
+interface TourStop {
+  module: StartModule;
+  icon: ReactNode;
+  lines: string[];
+  scene: ReactNode;
+}
+
+function tourStops(cleanupAvailable: boolean): TourStop[] {
+  const stops: TourStop[] = [
+    {
+      module: 'captaciones',
+      icon: <Radar className="h-4 w-4" />,
+      lines: [
+        'Te traigo dueños que venden sin inmobiliaria.',
+        'Cada semana, con el motivo por el que vale la pena llamar y un mensaje listo para mandar por WhatsApp.',
+      ],
+      scene: <CaptacionesScene />,
+    },
+    {
+      module: 'crm',
+      icon: <Users className="h-4 w-4" />,
+      lines: [
+        'Contame cómo te fue con un cliente.',
+        'Escrito o por voz. Yo armo el registro, la tarea y el próximo mensaje; vos confirmás antes de que se guarde nada.',
+      ],
+      scene: <CarteraScene />,
+    },
+    {
+      module: 'enhance',
+      icon: <Maximize2 className="h-4 w-4" />,
+      lines: [
+        'Tus fotos, listas para publicar.',
+        'Si son chicas o están comprimidas, te las devuelvo nítidas. Se procesan en tu dispositivo: no se suben a ningún lado.',
+      ],
+      scene: <FotosScene />,
+    },
+  ];
+  if (cleanupAvailable) {
+    stops.push({
+      module: 'inpainting',
+      icon: <Wand2 className="h-4 w-4" />,
+      lines: ['Y saco marcas de agua.', 'Subí las fotos con el logo de otro portal y te las devuelvo limpias.'],
+      scene: <LimpiezaScene />,
+    });
+  }
+  return stops;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Flujo
+ * ────────────────────────────────────────────────────────────────────────── */
+
+type Step = { kind: 'name' } | { kind: 'welcome' } | { kind: 'tour'; index: number } | { kind: 'start' };
+
+const stepKey = (s: Step) => (s.kind === 'tour' ? `tour-${s.index}` : s.kind);
+
+export function WelcomeFlow({ user, onDone, replay = false }: WelcomeFlowProps) {
   // Las cuentas nuevas no tienen nombre (useAuthUser cae en el email).
-  const hasRealName = user.name !== user.email;
-  const [step, setStep] = useState(0);
+  const initialName = user.name !== user.email ? user.name : '';
+  const [name, setName] = useState(initialName);
+  const [step, setStep] = useState<Step>({ kind: 'name' });
   const [direction, setDirection] = useState(1);
-  const [fullName, setFullName] = useState(hasRealName ? user.name : '');
-  const [preferredName, setPreferredName] = useState(user.preferredName);
-  const [preferredTouched, setPreferredTouched] = useState(false);
-  const [tone, setTone] = useState<MessageTone>(user.messageTone);
-  const [startModule, setStartModule] = useState<StartModule>(user.startModule ?? 'captaciones');
-  const [theme, setTheme] = useState<ThemePreference>(() => readSettings().theme);
+  const cleanupAvailable = useCleanupAvailable();
+  const stops = useMemo(() => tourStops(cleanupAvailable === true), [cleanupAvailable]);
+  const startOptions = stops.map((s) => s.module);
+  const [startModule, setStartModule] = useState<StartModule>(
+    user.startModule && user.startModule !== 'inpainting' ? user.startModule : 'captaciones'
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const nickname = preferredName.trim() || fullName.trim().split(/\s+/)[0] || '';
-  const canContinue = step !== 0 || fullName.trim().length > 0;
+  const nameChanged = name.trim() !== initialName.trim();
+  const firstName = (nameChanged ? '' : user.preferredName) || name.trim().split(/\s+/)[0] || '';
 
-  const go = (delta: number) => {
-    setDirection(delta);
-    setStep((s) => Math.min(TOTAL_STEPS - 1, Math.max(0, s + delta)));
+  const goTo = (next: Step, dir: number) => {
+    setDirection(dir);
+    setStep(next);
   };
 
   const save = async (skip: boolean) => {
@@ -99,15 +333,15 @@ export function WelcomeFlow({ user, onDone }: WelcomeFlowProps) {
           skip
             ? { onboardingDone: true }
             : {
-                name: fullName.trim() || undefined,
-                preferredName: preferredName.trim(),
-                messageTone: tone,
+                // El apodo sale del nombre solo si lo escribió acá; si no, se
+                // respeta el que haya elegido en Configuración.
+                ...(nameChanged ? { name: name.trim(), preferredName: name.trim().split(/\s+/)[0] } : {}),
                 startModule,
                 onboardingDone: true,
               }
         ),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'No se pudo guardar.');
       onDone(skip ? null : startModule);
     } catch (err) {
@@ -116,102 +350,155 @@ export function WelcomeFlow({ user, onDone }: WelcomeFlowProps) {
     }
   };
 
-  const pickTheme = (value: ThemePreference) => {
-    setTheme(value);
-    updateSettings({ theme: value });
+  const submitName = (e: FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    goTo({ kind: 'welcome' }, 1);
   };
 
-  const steps: { title: string; subtitle: string; body: ReactNode }[] = [
-    {
-      title: 'Bienvenido/a a Plinth',
-      subtitle: 'Antes de arrancar, contanos un poco de vos. Te lleva menos de un minuto.',
-      body: (
-        <div className="space-y-4">
-          <label className="block space-y-1.5">
-            <span className={labelClass}>Tu nombre y apellido</span>
-            <input
-              autoFocus
-              value={fullName}
-              onChange={(e) => {
-                setFullName(e.target.value);
-                if (!preferredTouched) setPreferredName(e.target.value.trim().split(/\s+/)[0] ?? '');
-              }}
-              placeholder="Juana Pérez"
-              autoComplete="name"
-              className={inputClass}
-            />
-            <span className="block text-2xs text-[#5b616d]">Con este nombre firmás los mensajes a clientes.</span>
-          </label>
-          <label className="block space-y-1.5">
-            <span className={labelClass}>¿Cómo querés que te llame?</span>
-            <input
-              value={preferredName}
-              onChange={(e) => {
-                setPreferredName(e.target.value);
-                setPreferredTouched(true);
-              }}
-              placeholder="Juani"
-              maxLength={40}
-              autoComplete="nickname"
-              className={inputClass}
-            />
-          </label>
-        </div>
-      ),
-    },
-    {
-      title: nickname ? `Genial, ${nickname}. ¿Cómo le hablás a tus clientes?` : '¿Cómo le hablás a tus clientes?',
-      subtitle: 'La IA usa este tono cuando te sugiere mensajes de seguimiento.',
-      body: (
-        <div role="radiogroup" aria-label="Tono de los mensajes" className="space-y-2">
-          {(Object.keys(MESSAGE_TONE_LABELS) as MessageTone[]).map((value) => (
-            <OptionCard key={value} selected={tone === value} onClick={() => setTone(value)}>
-              <span className="block text-sm font-medium text-white">{MESSAGE_TONE_LABELS[value].label}</span>
-              <span className="block mt-1 text-xs text-[#8f96a3] italic">“{MESSAGE_TONE_LABELS[value].example}”</span>
-            </OptionCard>
-          ))}
-        </div>
-      ),
-    },
-    {
-      title: '¿Qué usás más seguido?',
-      subtitle: 'Plinth va a abrir directamente ahí cada vez que entres.',
-      body: (
-        <div role="radiogroup" aria-label="Herramienta de inicio" className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {(Object.keys(START_MODULE_LABELS) as StartModule[]).map((value) => (
-            <OptionCard key={value} selected={startModule === value} onClick={() => setStartModule(value)}>
-              <span className="flex items-center gap-2 text-sm font-medium text-white">
-                <span className={startModule === value ? 'text-[#d4ff32]' : 'text-[#8f96a3]'}>
-                  {START_MODULE_META[value].icon}
-                </span>
-                {START_MODULE_LABELS[value]}
-              </span>
-              <span className="block mt-1 text-xs text-[#8f96a3]">{START_MODULE_META[value].hint}</span>
-            </OptionCard>
-          ))}
-        </div>
-      ),
-    },
-    {
-      title: 'Último detalle: ¿claro u oscuro?',
-      subtitle: 'Podés cambiar todo esto cuando quieras desde Configuración.',
-      body: (
-        <div role="radiogroup" aria-label="Tema" className="grid grid-cols-3 gap-2">
-          {THEME_OPTIONS.map((o) => (
-            <OptionCard key={o.value} selected={theme === o.value} onClick={() => pickTheme(o.value)}>
-              <span className="flex flex-col items-center gap-1.5 py-1 text-xs font-medium text-white">
-                <span className={theme === o.value ? 'text-[#d4ff32]' : 'text-[#8f96a3]'}>{o.icon}</span>
-                {o.label}
-              </span>
-            </OptionCard>
-          ))}
-        </div>
-      ),
-    },
-  ];
+  const tourIndex = step.kind === 'tour' ? step.index : -1;
 
-  const current = steps[step];
-  const isLast = step === TOTAL_STEPS - 1;
+  let body: ReactNode;
+  let footer: ReactNode;
+
+  if (step.kind === 'name') {
+    body = (
+      <form id="welcome-name" onSubmit={submitName} className="space-y-6">
+        <PlinthSays lines={['¡Hola! Soy Plinth, tu asistente personal.', '¿Cómo te llamás?']} />
+        <div className="pl-12">
+          <label htmlFor="welcome-name-input" className="sr-only">
+            Tu nombre
+          </label>
+          <input
+            id="welcome-name-input"
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Tu nombre"
+            maxLength={80}
+            autoComplete="name"
+            autoCapitalize="words"
+            enterKeyHint="next"
+            className={inputClass}
+          />
+        </div>
+      </form>
+    );
+    footer = (
+      <>
+        <button type="button" onClick={() => (replay ? onDone(null) : save(true))} disabled={isSaving} className={quietButton}>
+          {replay ? 'Cerrar' : 'Omitir'}
+        </button>
+        <button type="submit" form="welcome-name" disabled={!name.trim() || isSaving} className={primaryButton}>
+          Seguir
+          <ArrowRight className="h-4 w-4" />
+        </button>
+      </>
+    );
+  } else if (step.kind === 'welcome') {
+    body = (
+      <PlinthSays
+        lines={[
+          `Te doy la bienvenida, ${firstName}.`,
+          'Dejame mostrarte rápido qué podemos hacer juntos. Son menos de 30 segundos.',
+        ]}
+      />
+    );
+    footer = (
+      <>
+        <button type="button" onClick={() => goTo({ kind: 'start' }, 1)} className={quietButton}>
+          Lo veo después
+        </button>
+        <button type="button" autoFocus onClick={() => goTo({ kind: 'tour', index: 0 }, 1)} className={primaryButton}>
+          Mostrame
+          <ArrowRight className="h-4 w-4" />
+        </button>
+      </>
+    );
+  } else if (step.kind === 'tour') {
+    const stop = stops[Math.min(step.index, stops.length - 1)];
+    const isLastStop = step.index >= stops.length - 1;
+    body = (
+      <div className="space-y-5">
+        <PlinthSays lines={stop.lines} />
+        <div className="pl-12">{stop.scene}</div>
+      </div>
+    );
+    footer = (
+      <>
+        <button
+          type="button"
+          onClick={() => goTo(step.index === 0 ? { kind: 'welcome' } : { kind: 'tour', index: step.index - 1 }, -1)}
+          className={quietButton}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Atrás
+        </button>
+        <button
+          type="button"
+          autoFocus
+          onClick={() => goTo(isLastStop ? { kind: 'start' } : { kind: 'tour', index: step.index + 1 }, 1)}
+          className={primaryButton}
+        >
+          {isLastStop ? 'Listo' : 'Siguiente'}
+          <ArrowRight className="h-4 w-4" />
+        </button>
+      </>
+    );
+  } else {
+    body = (
+      <div className="space-y-5">
+        <PlinthSays
+          lines={[
+            firstName ? `Eso es todo, ${firstName}. ¿Por dónde arrancamos?` : 'Eso es todo. ¿Por dónde arrancamos?',
+            'Plinth va a abrir ahí cada vez que entres. El tono de tus mensajes y el tema los cambiás en Configuración.',
+          ]}
+        />
+        <div role="radiogroup" aria-label="Herramienta de inicio" className="pl-12 grid gap-2">
+          {startOptions.map((value) => {
+            const stop = stops.find((s) => s.module === value)!;
+            const selected = startModule === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => setStartModule(value)}
+                className={cn(
+                  'flex min-h-[48px] items-center gap-3 rounded-lg border px-3.5 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4ff32]/50',
+                  selected
+                    ? 'border-[#d4ff32]/60 bg-[#d4ff32]/[0.06] text-white'
+                    : 'border-[#27272A] bg-[#09090B] text-[#d4d4d8] hover:border-[#3f3f46]'
+                )}
+              >
+                <span className={selected ? 'text-[#d4ff32]' : 'text-[#8f96a3]'}>{stop.icon}</span>
+                <span className="flex-1">{START_MODULE_LABELS[value]}</span>
+                {selected && <Check className="h-4 w-4 text-[#d4ff32]" />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+    footer = (
+      <>
+        <button
+          type="button"
+          onClick={() => goTo(stops.length ? { kind: 'tour', index: stops.length - 1 } : { kind: 'welcome' }, -1)}
+          disabled={isSaving}
+          className={quietButton}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Atrás
+        </button>
+        <button type="button" onClick={() => save(false)} disabled={isSaving} className={primaryButton}>
+          {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+          Empezar
+        </button>
+      </>
+    );
+  }
 
   return (
     <motion.div
@@ -219,90 +506,52 @@ export function WelcomeFlow({ user, onDone }: WelcomeFlowProps) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
-      className="min-h-[100dvh] w-full flex items-center justify-center bg-[#09090B] px-4 py-8 overflow-y-auto"
+      className="min-h-[100dvh] w-full flex items-center justify-center bg-[#09090B] px-4 py-8 overflow-y-auto selection:bg-[#d4ff32]/30"
     >
-      <div className="w-full max-w-md flex flex-col items-center gap-6 my-auto">
-        <motion.div layoutId="plinth-logo" transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }} className="h-10">
+      <div className="w-full max-w-md flex flex-col items-center gap-8 my-auto">
+        <motion.div layoutId="plinth-logo" transition={{ duration: 0.6, ease: EASE_OUT }} className="h-8">
           <PlinthBrand isCollapsed={false} className="h-full text-white" />
         </motion.div>
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!canContinue || isSaving) return;
-            if (isLast) void save(false);
-            else go(1);
-          }}
-          className="w-full rounded-panel border border-[#27272A] bg-[#0f1115] p-6 sm:p-8 space-y-6 shadow-ambient overflow-hidden"
+        <div
+          className="w-full rounded-panel border border-[#27272A] bg-[#0f1115] p-5 sm:p-7 shadow-ambient overflow-hidden"
+          aria-live="polite"
         >
-          <div className="flex items-center gap-1.5" aria-label={`Paso ${step + 1} de ${TOTAL_STEPS}`}>
-            {steps.map((_, i) => (
-              <span
-                key={i}
-                className={cn(
-                  'h-1 rounded-full transition-all duration-300',
-                  i === step ? 'w-6 bg-[#d4ff32]' : i < step ? 'w-3 bg-[#d4ff32]/40' : 'w-3 bg-[#27272A]'
-                )}
-              />
-            ))}
-          </div>
+          {tourIndex >= 0 && (
+            <div className="mb-5 flex items-center gap-1.5" aria-label={`Paso ${tourIndex + 1} de ${stops.length}`}>
+              {stops.map((_, i) => (
+                <span
+                  key={i}
+                  className={cn(
+                    'h-1 rounded-full transition-all duration-300',
+                    i === tourIndex ? 'w-6 bg-[#d4ff32]' : i < tourIndex ? 'w-3 bg-[#d4ff32]/40' : 'w-3 bg-[#27272A]'
+                  )}
+                />
+              ))}
+            </div>
+          )}
 
           <AnimatePresence mode="wait" initial={false} custom={direction}>
             <motion.div
-              key={step}
+              key={stepKey(step)}
               custom={direction}
               initial={{ opacity: 0, x: 16 * direction }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -16 * direction }}
-              transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-              className="space-y-5"
+              transition={{ duration: 0.2, ease: EASE_OUT }}
             >
-              <div className="space-y-1.5">
-                <h1 className="text-lg font-semibold text-white leading-snug">{current.title}</h1>
-                <p className="text-xs text-[#8f96a3] leading-relaxed">{current.subtitle}</p>
-              </div>
-              {current.body}
+              {body}
             </motion.div>
           </AnimatePresence>
 
           {error && (
-            <p role="alert" className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-subtle px-3 py-2">
+            <p role="alert" className="mt-5 text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-subtle px-3 py-2">
               {error}
             </p>
           )}
 
-          <div className="flex items-center justify-between gap-2">
-            {step === 0 ? (
-              <button
-                type="button"
-                onClick={() => save(true)}
-                disabled={isSaving}
-                className="px-2 py-1.5 text-xs font-medium text-[#5b616d] hover:text-[#8f96a3] transition-colors disabled:opacity-40"
-              >
-                Omitir por ahora
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => go(-1)}
-                disabled={isSaving}
-                className="flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium text-[#8f96a3] hover:text-white transition-colors disabled:opacity-40"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                Atrás
-              </button>
-            )}
-            <button
-              type="submit"
-              disabled={!canContinue || isSaving}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-[#d4ff32] text-zinc-950 text-xs font-semibold hover:bg-[#b8e61e] transition-colors active:scale-[0.98] disabled:opacity-40"
-            >
-              {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              <span>{isLast ? 'Empezar' : 'Continuar'}</span>
-              {!isLast && !isSaving && <ArrowRight className="w-3.5 h-3.5" />}
-            </button>
-          </div>
-        </form>
+          <div className="mt-7 flex items-center justify-between gap-2">{footer}</div>
+        </div>
       </div>
     </motion.div>
   );

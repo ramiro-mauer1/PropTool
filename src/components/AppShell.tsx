@@ -15,6 +15,8 @@ import { BottomNavBar } from "@/components/ui/bottom-nav-bar";
 import { AnimatedSidebarText } from "@/components/AnimatedSidebarText";
 import { SendToEnhanceModal } from "@/components/SendToEnhanceModal";
 import { ProfileMenu, ProfileAvatar, LoginView, WelcomeFlow, AccountSheet } from "@/components/auth";
+import { REPLAY_WELCOME_EVENT } from "@/components/auth/WelcomeFlow";
+import type { StartModule } from "@/lib/userPreferences";
 import { APP_SECTIONS, isSectionActive, startHref } from "@/components/appSections";
 import { BatchImage, WatermarkBBox } from "@/types/batch";
 import { detectWatermarkBox, createMaskFromBBox } from "@/utils/textDetector";
@@ -360,6 +362,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const cleanupAvailable = useCleanupAvailable();
 
+  // "Ver la bienvenida de nuevo" (Configuración → Apariencia) la pide por evento.
+  const [replayWelcome, setReplayWelcome] = useState(false);
+  useEffect(() => {
+    const open = () => setReplayWelcome(true);
+    window.addEventListener(REPLAY_WELCOME_EVENT, open);
+    return () => window.removeEventListener(REPLAY_WELCOME_EVENT, open);
+  }, []);
+
+  const finishWelcome = useCallback(
+    (module: StartModule | null) => {
+      setReplayWelcome(false);
+      if (module) router.replace(startHref(module));
+      void refreshAuth();
+    },
+    [router, refreshAuth]
+  );
+
   // Pendientes por sección: badge en la barra lateral, punto en la inferior.
   const sectionCounts: Partial<Record<string, number>> = {
     inpainting: images.length,
@@ -437,7 +456,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {!authUser ? (
         <LoginView key="login" onSuccess={refreshAuth} />
       ) : authUser.needsOnboarding ? (
-        <WelcomeFlow key="welcome" user={authUser} onDone={() => void refreshAuth()} />
+        <WelcomeFlow key="welcome" user={authUser} onDone={finishWelcome} />
+      ) : replayWelcome ? (
+        <WelcomeFlow key="welcome-replay" user={authUser} replay onDone={finishWelcome} />
       ) : (
         <motion.div
           key="app"
