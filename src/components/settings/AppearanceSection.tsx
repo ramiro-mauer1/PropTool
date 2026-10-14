@@ -1,8 +1,9 @@
 'use client';
 
-import { Monitor, Moon, Sun } from 'lucide-react';
+import { Monitor, Moon, PlayCircle, Sun } from 'lucide-react';
+import { REPLAY_WELCOME_EVENT } from '@/components/auth/WelcomeFlow';
 import { useDeviceSettings, type ThemePreference } from '@/lib/settings';
-import { SectionHeader, Segmented } from './ui';
+import { SectionHeader, Segmented, secondaryButtonClass } from './ui';
 
 export function AppearanceSection() {
   const { settings, update } = useDeviceSettings();
@@ -20,6 +21,18 @@ export function AppearanceSection() {
           { value: 'system', label: 'Sistema', icon: <Monitor className="w-3.5 h-3.5" /> },
         ]}
       />
+
+      <div className="pt-2 space-y-3">
+        <SectionHeader title="Bienvenida" description="El recorrido corto por lo que hace Plinth." />
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new Event(REPLAY_WELCOME_EVENT))}
+          className={secondaryButtonClass}
+        >
+          <PlayCircle className="w-3.5 h-3.5" />
+          Ver la bienvenida de nuevo
+        </button>
+      </div>
     </div>
   );
 }
