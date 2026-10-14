@@ -9,7 +9,11 @@ const inputClass =
   'w-full rounded-subtle border border-[#27272A] bg-[#09090B] px-3 py-2 text-sm text-[#FAFAFA] placeholder:text-[#52525B] focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50';
 const labelClass = 'text-2xs font-semibold text-[#8f96a3] uppercase tracking-wide';
 
-export function AccesoForm({ tokenHash, type }: { tokenHash: string; type: string }) {
+/**
+ * `token`: Plinth's own link. `tokenHash`: a Supabase link sent before the
+ * switch, still accepted until it expires (see accept-invite).
+ */
+export function AccesoForm({ token, tokenHash, type }: { token: string; tokenHash: string; type: string }) {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -18,7 +22,7 @@ export function AccesoForm({ tokenHash, type }: { tokenHash: string; type: strin
   const [expired, setExpired] = useState(false);
 
   const isNew = type === 'invite';
-  const linkValid = Boolean(tokenHash) && (type === 'invite' || type === 'email');
+  const linkValid = Boolean(token) || (Boolean(tokenHash) && (type === 'invite' || type === 'email'));
   const mismatch = confirm.length > 0 && confirm !== password;
 
   const handleSubmit = async (e: FormEvent) => {
@@ -30,7 +34,7 @@ export function AccesoForm({ tokenHash, type }: { tokenHash: string; type: strin
       const res = await fetch('/api/auth/accept-invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token_hash: tokenHash, type, password }),
+        body: JSON.stringify(token ? { token, password } : { token_hash: tokenHash, type, password }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -167,7 +171,7 @@ function LinkExpired() {
     <div className="w-full rounded-panel border border-[#27272A] bg-[#0f1115] p-6 sm:p-8 space-y-6 shadow-ambient">
       <div className="space-y-1">
         <h1 className="text-sm font-semibold text-[#FAFAFA]">Este link ya no sirve</h1>
-        <p className="text-xs text-[#8f96a3]">Cada link sirve una sola vez y vence al poco tiempo.</p>
+        <p className="text-xs text-[#8f96a3]">Cada link sirve una sola vez y vale por 3 días.</p>
       </div>
 
       <div className="space-y-2">

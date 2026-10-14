@@ -7,11 +7,12 @@ export const metadata = { title: 'Crear contraseña · Plinth' };
 export default async function AccesoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ token_hash?: string | string[]; type?: string | string[] }>;
+  searchParams: Promise<{ token?: string | string[]; token_hash?: string | string[]; type?: string | string[] }>;
 }) {
-  const { token_hash, type } = await searchParams;
+  const { token, token_hash, type } = await searchParams;
   return (
     <AccesoForm
+      token={typeof token === 'string' ? token : ''}
       tokenHash={typeof token_hash === 'string' ? token_hash : ''}
       type={typeof type === 'string' ? type : ''}
     />

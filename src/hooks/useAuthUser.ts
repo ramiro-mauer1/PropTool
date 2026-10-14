@@ -38,7 +38,10 @@ function toAuthUser(
     preferredName: preferred || fullName.split(/\s+/)[0] || '',
     messageTone: messageToneFromMetadata(meta),
     startModule: isStartModule(meta.start_module) ? meta.start_module : null,
-    needsOnboarding: meta.needs_onboarding === true,
+    // Hasta que la complete u omita (needs_onboarding: false). Antes solo la
+    // veían las cuentas creadas por invitación con la marca en true; las que
+    // entraban por otro camino se la salteaban.
+    needsOnboarding: meta.needs_onboarding !== false,
     isOwner: isAppOwner(user),
   };
 }
