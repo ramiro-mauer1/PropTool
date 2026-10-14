@@ -114,7 +114,10 @@ export async function sendAccessLinkEmail(to: string, url: string, type: AccessL
   const vence = `Vale por ${ACCESS_LINK_TTL_HOURS / 24} días y se usa una sola vez.`;
   return sendEmail({
     to,
-    subject: type === 'invite' ? 'Tu acceso a Plinth está listo' : 'Tu link para entrar a Plinth',
+    // Asuntos distintos de los de antes ("Tu acceso a Plinth está listo"):
+    // Gmail agrupa por asunto y la gente tocaba el primer mail del hilo, con
+    // un link viejo de Supabase que ya no servía.
+    subject: type === 'invite' ? 'Creá tu contraseña de Plinth' : 'Elegí tu nueva contraseña de Plinth',
     text: `Hola. Ya tenés acceso a Plinth. Entrá a este link para ${accion}:\n\n${url}\n\n${vence} Si se vence, abrilo igual: ahí mismo podés pedir uno nuevo. Si no pediste acceso, ignorá este email.`,
     html: `<p>Hola. Ya tenés acceso a Plinth.</p><p><a href="${escapeHtml(url)}">Entrá acá para ${accion}</a></p><p style="color:#666;font-size:13px">${vence} Si se vence, abrilo igual: ahí mismo podés pedir uno nuevo. Si no pediste acceso, ignorá este email.</p>`,
   });
