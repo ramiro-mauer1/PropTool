@@ -48,7 +48,9 @@ describe('POST /api/auth/accept-invite', () => {
 
   it('link vencido o usado', async () => {
     verified = { user: null, error: { message: 'Token has expired or is invalid' } };
-    expect((await call({})).status).toBe(400);
+    const res = await call({});
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('link_expired');
     expect(updateUser).not.toHaveBeenCalled();
   });
 

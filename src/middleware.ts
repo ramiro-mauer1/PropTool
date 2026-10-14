@@ -12,6 +12,7 @@ const PUBLIC_API_PATHS = [
   '/api/auth/logout',
   '/api/auth/request-access',
   '/api/auth/accept-invite',
+  '/api/auth/resend-access-link',
   '/api/captaciones/import',
   '/api/captaciones/estados',
 ];
