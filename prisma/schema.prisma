@@ -44,6 +44,26 @@ model AccessRequest {
   @@index([estado, creadaEn])
 }
 
+// One-time links to /acceso, where an approved person sets their password.
+// Plinth's own instead of Supabase's: Supabase keeps a single valid token per
+// user, so approving twice or resending silently killed the link already in
+// the person's inbox. Here every link stays valid until it expires or one of
+// them is used (then the rest are spent too). Only the SHA-256 of the token is
+// stored.
+model AccessLink {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  email     String
+  userId    String
+  /// 'invite' (new account) or 'reset' (already had one): only changes the copy.
+  kind      String
+  creadoEn  DateTime  @default(now())
+  venceEn   DateTime
+  usadoEn   DateTime?
+
+  @@index([email])
+}
+
 // Fixed-window counters for rate limiting (login attempts, paid API calls).
 // Written only through raw SQL in src/lib/security/rateLimit.ts.
 model RateLimit {
