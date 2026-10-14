@@ -62,7 +62,7 @@ export async function sendAccessLinkEmail(to: string, url: string, type: AccessL
   return sendEmail({
     to,
     subject: type === 'invite' ? 'Tu acceso a Plinth está listo' : 'Tu link para entrar a Plinth',
-    text: `Hola. Ya tenés acceso a Plinth. Entrá a este link para ${accion}:\n\n${url}\n\nEs de un solo uso y vence en poco tiempo. Si se vence, pedile uno nuevo al administrador. Si no pediste acceso, ignorá este email.`,
-    html: `<p>Hola. Ya tenés acceso a Plinth.</p><p><a href="${escapeHtml(url)}">Entrá acá para ${accion}</a></p><p style="color:#666;font-size:13px">Es de un solo uso y vence en poco tiempo. Si se vence, pedile uno nuevo al administrador. Si no pediste acceso, ignorá este email.</p>`,
+    text: `Hola. Ya tenés acceso a Plinth. Entrá a este link para ${accion}:\n\n${url}\n\nEs de un solo uso y vence en poco tiempo. Si se vence, abrilo igual: ahí mismo podés pedir uno nuevo. Si no pediste acceso, ignorá este email.`,
+    html: `<p>Hola. Ya tenés acceso a Plinth.</p><p><a href="${escapeHtml(url)}">Entrá acá para ${accion}</a></p><p style="color:#666;font-size:13px">Es de un solo uso y vence en poco tiempo. Si se vence, abrilo igual: ahí mismo podés pedir uno nuevo. Si no pediste acceso, ignorá este email.</p>`,
   });
 }
