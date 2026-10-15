@@ -8,7 +8,7 @@ import {
   Play,
   StopCircle,
   Trash2,
-  Archive,
+  Download,
   CheckCircle2,
   AlertCircle,
   Loader2,
@@ -71,7 +71,7 @@ export function EnhanceWorkspace({
     cancelActiveTask,
     clearQueue,
     downloadSingle,
-    downloadAllZip,
+    downloadAll,
     warmupModel,
   } = controls;
 
@@ -274,12 +274,18 @@ export function EnhanceWorkspace({
                 {completedCount > 0 && (
                   <button
                     type="button"
-                    onClick={downloadAllZip}
-                    className="hidden lg:flex items-center gap-1.5 h-8 px-3.5 rounded-subtle bg-success/15 hover:bg-success/25 text-success border border-success/30 text-xs font-semibold btn-tactile"
-                    title="Descargar lote completo en archivo ZIP"
+                    onClick={downloadAll}
+                    className="flex items-center justify-center gap-1.5 h-9 sm:h-8 px-3 sm:px-3.5 rounded-subtle bg-success/15 hover:bg-success/25 text-success border border-success/30 text-xs font-semibold btn-tactile"
+                    title={
+                      completedCount === 1
+                        ? "Descargar la foto mejorada"
+                        : `Descargar las ${completedCount} fotos mejoradas`
+                    }
+                    aria-label={`Descargar todas las fotos mejoradas (${completedCount})`}
                   >
-                    <Archive className="w-3.5 h-3.5" />
-                    <span>Descargar (.zip)</span>
+                    <Download className="w-3.5 h-3.5 shrink-0" />
+                    <span className="hidden sm:inline">Descargar todas ({completedCount})</span>
+                    <span className="sm:hidden">Todas ({completedCount})</span>
                   </button>
                 )}
 
@@ -351,21 +357,6 @@ export function EnhanceWorkspace({
                             >
                               <Upload className="w-4 h-4 shrink-0 text-muted" />
                               <span>Agregar fotos</span>
-                            </button>
-                          )}
-
-                          {completedCount > 0 && (
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => {
-                                setMenuOpen(false);
-                                downloadAllZip();
-                              }}
-                              className="w-full flex items-center gap-2.5 px-3 min-h-[44px] rounded-lg text-sm font-semibold text-success hover:bg-success/10 transition-colors text-left"
-                            >
-                              <Archive className="w-4 h-4 shrink-0" />
-                              <span>Descargar (.zip)</span>
                             </button>
                           )}
 
