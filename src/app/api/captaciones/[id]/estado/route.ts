@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireUser } from '@/lib/auth/requireUser';
 import { normalizeCurrency } from '@/lib/captaciones/contract';
+import { autorDeSesion, origenDesdeBody } from '@/lib/captaciones/eventos';
 import { phoneDigits } from '@/lib/captaciones/phone';
 import { isCaptacionEstado } from '@/types/captaciones';
 
@@ -15,6 +16,10 @@ const ESTADOS_RESPONDIO: string[] = ['respondio', 'tasacion', 'captado'];
 // reopen) so a mis-tap is always recoverable. Marking "captado" hands the
 // listing over to the Cartera: it creates — or reuses — a Contact and a
 // Property and stores their ids, so marking it twice never duplicates them.
+//
+// Every change also appends a CaptacionEvento, in the same transaction, with
+// the user from the server session (never from the body). The body may only
+// say which screen it came from (`origen`: app | revisar).
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   // Middleware already requires a session; checked again here so the route
@@ -24,7 +29,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   const { user } = auth;
 
-  let body: { estado?: unknown; motivo?: unknown };
+  let body: { estado?: unknown; motivo?: unknown; origen?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -36,6 +41,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   const estado = body.estado;
   const motivo = typeof body.motivo === 'string' ? body.motivo.trim().slice(0, MAX_MOTIVO) : '';
+  const origen = origenDesdeBody(body.origen);
+  const autor = autorDeSesion(user);
 
   const captacion = await prisma.captacion.findUnique({ where: { id: id } });
   if (!captacion) return NextResponse.json({ error: 'Captación no encontrada.' }, { status: 404 });
@@ -53,12 +60,38 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       ? [captacion.notas, `Descartada: ${motivo}`].filter(Boolean).join('\n')
       : undefined;
 
+  // Re-marking the same estado with nothing new to note leaves no event.
+  const estadoAnterior = captacion.estado;
+  const notasCambiaron = notas !== undefined && notas !== captacion.notas;
+  const evento = (estadoAnterior: typeof captacion.estado) => ({
+    captacionId: captacion.id,
+    tipo: estadoAnterior !== estado ? 'estado' : 'notas',
+    estadoAnterior,
+    estadoNuevo: estado,
+    notasCambiaron,
+    ...autor,
+    origen,
+    creadoEn: now,
+  });
+
   if (estado !== 'captado') {
-    const updated = await prisma.captacion.update({
-      where: { id: captacion.id },
-      data: { estado, estadoActualizadoEn: now, ...hitos, ...(notas !== undefined ? { notas } : {}) },
-    });
-    return NextResponse.json({ captacion: updated });
+    try {
+      const updated = await prisma.$transaction(async (tx) => {
+        const u = await tx.captacion.update({
+          where: { id: captacion.id },
+          data: { estado, estadoActualizadoEn: now, ...hitos, ...(notas !== undefined ? { notas } : {}) },
+        });
+        const e =
+          estadoAnterior !== estado || notasCambiaron
+            ? await tx.captacionEvento.create({ data: evento(estadoAnterior) })
+            : null;
+        return { captacion: u, evento: e };
+      });
+      return NextResponse.json(updated);
+    } catch (err) {
+      console.error('[captaciones/estado] Unexpected error:', err);
+      return NextResponse.json({ error: 'Error inesperado al cambiar el estado.' }, { status: 500 });
+    }
   }
 
   const agent = agentName(user);
@@ -108,7 +141,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         ).id;
       }
 
-      return tx.captacion.update({
+      const e = locked.estado !== estado ? await tx.captacionEvento.create({ data: evento(locked.estado) }) : null;
+
+      const u = await tx.captacion.update({
         where: { id: locked.id },
         data: {
           estado,
@@ -119,8 +154,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           ...(locked.captadoEn ? {} : { captadoEn: now }),
         },
       });
+      return { captacion: u, evento: e };
     });
-    return NextResponse.json({ captacion: updated });
+    return NextResponse.json(updated);
   } catch (err) {
     console.error('[captaciones/estado] Unexpected error:', err);
     return NextResponse.json({ error: 'Error inesperado al marcar la captación.' }, { status: 500 });

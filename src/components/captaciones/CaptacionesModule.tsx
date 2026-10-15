@@ -13,11 +13,12 @@ import {
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
 import { Layers, RefreshCw, Undo2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useCaptaciones } from '@/hooks/useCaptaciones';
+import { useCaptaciones, type OrigenCambio } from '@/hooks/useCaptaciones';
 import { useToast } from '@/components/Toast';
 import type { CaptacionDTO, CaptacionEstadoValue } from '@/types/captaciones';
 import { CaptacionCard } from './CaptacionCard';
 import { ETAPA_LABEL, PESTANIAS, pestaniaDe, type Pestania } from './format';
+import { autoresDe, cambiadaPor } from './historial';
 import { RevisarModo } from './revisar/RevisarModo';
 
 interface CaptacionesModuleProps {
@@ -30,6 +31,7 @@ interface Movida {
   id: string;
   desde: CaptacionEstadoValue;
   hacia: CaptacionEstadoValue;
+  origen: OrigenCambio;
 }
 
 const UNDO_MS = 8000;
@@ -99,6 +101,7 @@ export function CaptacionesModule({ agentName = null }: CaptacionesModuleProps) 
   const [operacion, setOperacion] = useState<Operacion>('todas');
   const [partido, setPartido] = useState<string>('');
   const [soloBarrioCerrado, setSoloBarrioCerrado] = useState(false);
+  const [cambiadoPor, setCambiadoPor] = useState<string>('');
   const [movida, setMovida] = useState<Movida | null>(null);
   // Las nuevas visibles al tocar "Revisar"; el modo arma su mazo con ellas.
   const [revisando, setRevisando] = useState<CaptacionDTO[] | null>(null);
@@ -112,16 +115,19 @@ export function CaptacionesModule({ agentName = null }: CaptacionesModuleProps) 
     [captaciones]
   );
 
-  // Operación / partido / barrio cerrado filter first, so tab counters match what each tab shows.
+  const autores = useMemo(() => autoresDe(captaciones ?? []), [captaciones]);
+
+  // Operación / partido / barrio cerrado / cambiado por filter first, so tab counters match what each tab shows.
   const filtradas = useMemo(
     () =>
       (captaciones ?? []).filter(
         (c) =>
           (operacion === 'todas' || c.operacion === operacion) &&
           (!partido || c.partido === partido) &&
-          (!soloBarrioCerrado || c.barrioPrivado)
+          (!soloBarrioCerrado || c.barrioPrivado) &&
+          (!cambiadoPor || cambiadaPor(c, cambiadoPor))
       ),
-    [captaciones, operacion, partido, soloBarrioCerrado]
+    [captaciones, operacion, partido, soloBarrioCerrado, cambiadoPor]
   );
 
   const conteos = useMemo(() => {
@@ -134,12 +140,18 @@ export function CaptacionesModule({ agentName = null }: CaptacionesModuleProps) 
   const visibles = useMemo(() => filtradas.filter((c) => pestaniaDe(c.estado) === pestania), [filtradas, pestania]);
 
   const mover = useCallback(
-    async (id: string, desde: CaptacionEstadoValue, hacia: CaptacionEstadoValue, motivo?: string): Promise<boolean> => {
-      const ok = await cambiarEstado(id, hacia, motivo);
+    async (
+      id: string,
+      desde: CaptacionEstadoValue,
+      hacia: CaptacionEstadoValue,
+      motivo?: string,
+      origen: OrigenCambio = 'app'
+    ): Promise<boolean> => {
+      const ok = await cambiarEstado(id, hacia, motivo, origen);
       if (!ok) return false;
       clearTimeout(undoTimer.current);
       if (pestaniaDe(desde) !== pestaniaDe(hacia)) {
-        setMovida({ id, desde, hacia });
+        setMovida({ id, desde, hacia, origen });
         undoTimer.current = setTimeout(() => setMovida(null), UNDO_MS);
       }
       if (hacia === 'captado') {
@@ -158,10 +170,10 @@ export function CaptacionesModule({ agentName = null }: CaptacionesModuleProps) 
     if (!movida) return;
     clearTimeout(undoTimer.current);
     setMovida(null);
-    await cambiarEstado(movida.id, movida.desde);
+    await cambiarEstado(movida.id, movida.desde, undefined, movida.origen);
   }, [movida, cambiarEstado]);
 
-  const hayFiltros = operacion !== 'todas' || partido !== '' || soloBarrioCerrado;
+  const hayFiltros = operacion !== 'todas' || partido !== '' || soloBarrioCerrado || cambiadoPor !== '';
 
   return (
     <MotionConfig reducedMotion="user">
@@ -255,6 +267,22 @@ export function CaptacionesModule({ agentName = null }: CaptacionesModuleProps) 
               ))}
             </select>
 
+            {autores.length > 0 && (
+              <select
+                aria-label="Cambiado por"
+                value={cambiadoPor}
+                onChange={(e) => setCambiadoPor(e.target.value)}
+                className="focus-ring rounded-subtle border border-border bg-surface text-xs text-foreground px-2.5 min-h-[44px] md:min-h-[32px]"
+              >
+                <option value="">Cambiado por: todos</option>
+                {autores.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    Cambiado por {a.label}
+                  </option>
+                ))}
+              </select>
+            )}
+
             <label className="inline-flex items-center gap-2 px-2.5 min-h-[44px] md:min-h-[32px] rounded-subtle border border-border bg-surface text-xs text-foreground cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -273,6 +301,7 @@ export function CaptacionesModule({ agentName = null }: CaptacionesModuleProps) 
                   setOperacion('todas');
                   setPartido('');
                   setSoloBarrioCerrado(false);
+                  setCambiadoPor('');
                 }}
                 className="focus-ring text-xs text-secondary hover:text-foreground underline underline-offset-4 px-1 min-h-[44px] md:min-h-0"
               >

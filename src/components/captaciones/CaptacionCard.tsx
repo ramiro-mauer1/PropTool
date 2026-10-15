@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  History,
   Home,
   MoreHorizontal,
   ShieldCheck,
@@ -33,6 +34,7 @@ import {
 } from './format';
 import { BTN_OUTLINE, BTN_PRIMARY, ContactarPanel, useContactar } from './ContactarPanel';
 import { PuntajeDesglose, desgloseDe } from './PuntajeDesglose';
+import { autorDe, describirEvento, fechaCorta, fechaHora, lineaUltimoCambio, origenLabel } from './historial';
 
 // Everything copied from third-party listings (anunciante, motivo, señales,
 // borrador) is rendered as plain JSX text — never as HTML.
@@ -166,6 +168,7 @@ export function CaptacionCard({
   const [menu, setMenu] = useState<'closed' | 'main' | 'etapas'>('closed');
   const [puntajeOpen, setPuntajeOpen] = useState(false);
   const [contactoOpen, setContactoOpen] = useState(contactoAbiertoInicial);
+  const [historialOpen, setHistorialOpen] = useState(false);
   const [motivoDescarte, setMotivoDescarte] = useState('');
   const contacto = useContactar({ captacion: c, agentName, abierto: contactoOpen, onAdquirirTelefono });
   const uid = useId();
@@ -207,6 +210,7 @@ export function CaptacionCard({
   const siguiente = SIGUIENTE[c.estado];
   const titulo = `${capitalizar(c.tipo)} en ${c.operacion}`;
   const dueno = c.anunciante?.trim() || null;
+  const ultimoCambio = lineaUltimoCambio(c);
   const antiguedad =
     c.diasPublicado == null
       ? null
@@ -308,6 +312,7 @@ export function CaptacionCard({
             {c.abiertoACorredores && <span className={ETIQUETA}>Acepta corredores</span>}
           </p>
         )}
+        {ultimoCambio && <p className="text-xs text-secondary pt-1">{ultimoCambio}</p>}
       </div>
 
       {/* ── Acciones principales ──────────────────────────────────────── */}
@@ -485,6 +490,17 @@ export function CaptacionCard({
         <ContactarPanel captacion={c} comprando={comprando} control={contacto} />
       </Acordeon>
 
+      {/* ── Historial de cambios ──────────────────────────────────────── */}
+      <Acordeon
+        id={`${uid}-historial`}
+        open={historialOpen}
+        onToggle={() => setHistorialOpen((v) => !v)}
+        icon={<History className="w-[18px] h-[18px]" />}
+        title="Historial de cambios"
+      >
+        <HistorialLista captacion={c} />
+      </Acordeon>
+
       {(c.notas || c.contactId) && (
         <div className="border-t border-border px-4 py-3 space-y-1.5">
           {c.notas && <p className="text-xs text-secondary whitespace-pre-line">{c.notas}</p>}
@@ -497,5 +513,37 @@ export function CaptacionCard({
         </div>
       )}
     </motion.article>
+  );
+}
+
+function HistorialLista({ captacion: c }: { captacion: CaptacionDTO }) {
+  // Lo que pasó antes de que existiera el registro: se sabe el estado y la
+  // fecha del último cambio, pero no quién lo hizo.
+  const antes = c.eventos.length === 0 && c.estado !== 'nuevo';
+  if (c.eventos.length === 0 && !antes) {
+    return <p className="text-xs text-secondary">Todavía nadie cambió esta captación.</p>;
+  }
+  return (
+    <ol className="space-y-2.5">
+      {antes && (
+        <li className="text-xs text-secondary">
+          <span className="text-foreground">{ETAPA_LABEL[c.estado]}</span> · {fechaCorta(c.estadoActualizadoEn)} (antes del registro, sin autor)
+        </li>
+      )}
+      {[...c.eventos].reverse().map((e) => {
+        const autor = autorDe(e);
+        const origen = origenLabel(e.origen);
+        return (
+          <li key={e.id} className="text-xs leading-snug">
+            <span className="text-foreground">{describirEvento(e)}</span>
+            <span className="block text-secondary tabular-nums">
+              {fechaHora(e.creadoEn)}
+              {autor && ` · ${autor}`}
+              {origen && e.tipo !== 'alta' && ` · ${origen}`}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }

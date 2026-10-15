@@ -22,6 +22,12 @@ let rows: Row[];
 let contacts: { id: string; name: string; phone: string | null; assignedAgent: string | null }[];
 let properties: { id: string; addressOrZone: string; currency: string | null; status: string | null }[];
 let idCounter: number;
+let eventos: Record<string, unknown>[];
+
+type SessionUser = { id: string; email?: string; app_metadata: Record<string, unknown>; user_metadata: Record<string, unknown> };
+const JOTA: SessionUser = { id: 'u1', email: 'jota@plinth.lat', app_metadata: { plinth_access: true }, user_metadata: { full_name: 'Jota' } };
+const THIAGO: SessionUser = { id: 'u2', email: 'thiago@plinth.lat', app_metadata: { plinth_access: true }, user_metadata: { full_name: 'Thiago' } };
+let sessionUser: SessionUser | null;
 
 function buildFakePrisma() {
   const api = {
@@ -49,6 +55,13 @@ function buildFakePrisma() {
         return p;
       }),
     },
+    captacionEvento: {
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+        const e = { id: `evento-${++idCounter}`, ...data };
+        eventos.push(e);
+        return e;
+      }),
+    },
     $queryRaw: vi.fn(async () => []),
     $transaction: vi.fn(async (fn: (tx: typeof api) => Promise<unknown>) => fn(api)),
   };
@@ -58,7 +71,7 @@ function buildFakePrisma() {
 vi.mock('@/lib/db', () => ({ prisma: buildFakePrisma() }));
 vi.mock('@/lib/supabase/server', () => ({
   createClient: () => ({
-    auth: { getUser: async () => ({ data: { user: { id: 'u1', app_metadata: { plinth_access: true }, user_metadata: { full_name: 'Jota' } } } }) },
+    auth: { getUser: async () => ({ data: { user: sessionUser } }) },
   }),
 }));
 
@@ -77,6 +90,8 @@ function patch(body: unknown, id = 'cap-1') {
 
 beforeEach(() => {
   idCounter = 0;
+  eventos = [];
+  sessionUser = JOTA;
   contacts = [];
   properties = [];
   rows = [
@@ -168,5 +183,92 @@ describe('PATCH /api/captaciones/[id]/estado', () => {
 
   it('rechaza un estado inválido', async () => {
     expect((await patch({ estado: 'vendido' })).status).toBe(400);
+    expect(eventos).toHaveLength(0);
+  });
+
+  describe('historial (CaptacionEvento)', () => {
+    it('registra el cambio con el usuario de la sesión', async () => {
+      const res = await patch({ estado: 'descartado' });
+      expect(res.status).toBe(200);
+      expect(eventos).toEqual([
+        expect.objectContaining({
+          captacionId: 'cap-1',
+          tipo: 'estado',
+          estadoAnterior: 'tasacion',
+          estadoNuevo: 'descartado',
+          notasCambiaron: false,
+          usuarioId: 'u1',
+          usuarioEmail: 'jota@plinth.lat',
+          usuarioNombre: 'Jota',
+          origen: 'app',
+        }),
+      ]);
+      const data = await res.json();
+      expect(data.evento).toMatchObject({ usuarioId: 'u1', estadoNuevo: 'descartado' });
+    });
+
+    it('cada usuario queda registrado con su propia sesión', async () => {
+      await patch({ estado: 'contactado' });
+      sessionUser = THIAGO;
+      await patch({ estado: 'descartado' });
+      expect(eventos.map((e) => [e.usuarioId, e.estadoNuevo])).toEqual([
+        ['u1', 'contactado'],
+        ['u2', 'descartado'],
+      ]);
+    });
+
+    it('no se puede registrar un cambio a nombre de otro usuario desde el body', async () => {
+      sessionUser = THIAGO;
+      await patch({
+        estado: 'descartado',
+        usuarioId: 'u1',
+        usuarioEmail: 'jota@plinth.lat',
+        usuarioNombre: 'Jota',
+        usuario: { id: 'u1' },
+        userId: 'u1',
+      });
+      expect(eventos).toHaveLength(1);
+      expect(eventos[0]).toMatchObject({ usuarioId: 'u2', usuarioEmail: 'thiago@plinth.lat', usuarioNombre: 'Thiago' });
+    });
+
+    it('sin sesión responde 401 y no registra nada', async () => {
+      sessionUser = null;
+      expect((await patch({ estado: 'descartado' })).status).toBe(401);
+      expect(eventos).toHaveLength(0);
+      expect(rows[0].estado).toBe('tasacion');
+    });
+
+    it('un usuario sin acceso a la app no puede cambiar ni registrar', async () => {
+      sessionUser = { ...THIAGO, app_metadata: {} };
+      expect((await patch({ estado: 'descartado' })).status).toBe(401);
+      expect(eventos).toHaveLength(0);
+    });
+
+    it('guarda de qué pantalla vino, y un origen desconocido cuenta como app', async () => {
+      await patch({ estado: 'contactado', origen: 'revisar' });
+      await patch({ estado: 'descartado', origen: 'importacion' });
+      expect(eventos.map((e) => e.origen)).toEqual(['revisar', 'app']);
+    });
+
+    it('agregar un motivo a una ya descartada registra que cambiaron las notas, sin el texto', async () => {
+      rows[0].estado = 'descartado';
+      await patch({ estado: 'descartado', motivo: 'No quiere inmobiliarias' });
+      expect(eventos).toHaveLength(1);
+      expect(eventos[0]).toMatchObject({ tipo: 'notas', estadoAnterior: 'descartado', estadoNuevo: 'descartado', notasCambiaron: true });
+      expect(JSON.stringify(eventos[0])).not.toContain('No quiere inmobiliarias');
+    });
+
+    it('volver a marcar el mismo estado sin cambios no deja evento', async () => {
+      await patch({ estado: 'tasacion' });
+      expect(eventos).toHaveLength(0);
+    });
+
+    it('captado también queda registrado, una sola vez', async () => {
+      await patch({ estado: 'captado' });
+      await patch({ estado: 'captado' });
+      expect(eventos).toEqual([
+        expect.objectContaining({ estadoAnterior: 'tasacion', estadoNuevo: 'captado', usuarioId: 'u1' }),
+      ]);
+    });
   });
 });
