@@ -1,7 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { CaptacionDTO, CaptacionEstadoValue } from '@/types/captaciones';
+import type { CaptacionDTO, CaptacionEstadoValue, CaptacionEventoDTO } from '@/types/captaciones';
+
+/** Desde qué pantalla se cambió el estado (queda en el historial). */
+export type OrigenCambio = 'app' | 'revisar';
 
 export type CompraTelefonoResultado =
   | { ok: true; telefono: string | null; motivo: string | null }
@@ -52,7 +55,7 @@ export function useCaptaciones({ onError }: UseCaptacionesOptions) {
   }, []);
 
   const cambiarEstado = useCallback(
-    async (id: string, estado: CaptacionEstadoValue, motivo?: string): Promise<boolean> => {
+    async (id: string, estado: CaptacionEstadoValue, motivo?: string, origen: OrigenCambio = 'app'): Promise<boolean> => {
       const previa = captaciones?.find((c) => c.id === id);
       if (!previa) return false;
       patchLocal(id, { estado, estadoActualizadoEn: new Date().toISOString() });
@@ -60,11 +63,17 @@ export function useCaptaciones({ onError }: UseCaptacionesOptions) {
         const res = await fetch(`/api/captaciones/${id}/estado`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ estado, motivo }),
+          body: JSON.stringify({ estado, motivo, origen }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error ?? 'No se pudo cambiar el estado.');
-        patchLocal(id, data.captacion);
+        const evento = data.evento as CaptacionEventoDTO | null;
+        setCaptaciones(
+          (prev) =>
+            prev?.map((c) =>
+              c.id === id ? { ...c, ...data.captacion, eventos: evento ? [...c.eventos, evento] : c.eventos } : c
+            ) ?? prev
+        );
         return true;
       } catch (err) {
         patchLocal(id, { estado: previa.estado, estadoActualizadoEn: previa.estadoActualizadoEn });

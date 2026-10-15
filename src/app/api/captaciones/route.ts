@@ -57,6 +57,23 @@ export async function GET() {
       ultimaVezVista: true,
       contactId: true,
       propertyId: true,
+      // Historial completo (pocos eventos por captación): la tarjeta muestra
+      // el último y el filtro "Cambiado por" busca en todos.
+      eventos: {
+        orderBy: { creadoEn: 'asc' },
+        select: {
+          id: true,
+          tipo: true,
+          estadoAnterior: true,
+          estadoNuevo: true,
+          notasCambiaron: true,
+          usuarioId: true,
+          usuarioEmail: true,
+          usuarioNombre: true,
+          origen: true,
+          creadoEn: true,
+        },
+      },
     },
   });
 

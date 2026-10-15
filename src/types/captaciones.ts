@@ -14,6 +14,23 @@ export function isCaptacionEstado(v: unknown): v is CaptacionEstadoValue {
   return typeof v === 'string' && (CAPTACION_ESTADOS as readonly string[]).includes(v);
 }
 
+/** Un cambio en el historial de una captación (tabla CaptacionEvento). */
+export interface CaptacionEventoDTO {
+  id: string;
+  /** "estado" | "notas" | "alta" */
+  tipo: string;
+  estadoAnterior: CaptacionEstadoValue | null;
+  estadoNuevo: CaptacionEstadoValue | null;
+  notasCambiaron: boolean;
+  /** null solo en la importación automática. */
+  usuarioId: string | null;
+  usuarioEmail: string | null;
+  usuarioNombre: string | null;
+  /** "app" | "revisar" | "importacion" */
+  origen: string;
+  creadoEn: string;
+}
+
 /** Shape returned by GET /api/captaciones (dates serialized as ISO strings). */
 export interface CaptacionDTO {
   id: string;
@@ -57,4 +74,6 @@ export interface CaptacionDTO {
   ultimaVezVista: string;
   contactId: string | null;
   propertyId: string | null;
+  /** Del más viejo al más nuevo. Vacío si la captación no cambió desde que existe el registro. */
+  eventos: CaptacionEventoDTO[];
 }

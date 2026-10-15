@@ -6,7 +6,7 @@ import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'framer-
 import { Check, RotateCw, Undo2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { CaptacionDTO, CaptacionEstadoValue } from '@/types/captaciones';
-import type { CompraTelefonoResultado } from '@/hooks/useCaptaciones';
+import type { CompraTelefonoResultado, OrigenCambio } from '@/hooks/useCaptaciones';
 import { HojaContacto } from './HojaContacto';
 import { RevisarResumen } from './RevisarResumen';
 import { RevisarTarjeta, type Salida } from './RevisarTarjeta';
@@ -43,9 +43,15 @@ interface RevisarModoProps {
   comprando: Set<string>;
   /** Último cambio de etapa que el módulo ofrece deshacer. */
   movida: { id: string } | null;
-  mover: (id: string, desde: CaptacionEstadoValue, hacia: CaptacionEstadoValue, motivo?: string) => Promise<boolean>;
+  mover: (
+    id: string,
+    desde: CaptacionEstadoValue,
+    hacia: CaptacionEstadoValue,
+    motivo?: string,
+    origen?: OrigenCambio
+  ) => Promise<boolean>;
   deshacer: () => Promise<void>;
-  cambiarEstado: (id: string, estado: CaptacionEstadoValue, motivo?: string) => Promise<boolean>;
+  cambiarEstado: (id: string, estado: CaptacionEstadoValue, motivo?: string, origen?: OrigenCambio) => Promise<boolean>;
   adquirirTelefono: (id: string) => Promise<CompraTelefonoResultado>;
   onCerrar: () => void;
 }
@@ -119,7 +125,7 @@ export function RevisarModo({
     setMazo((m) => decidir(m, d));
     mostrarMotivos(d === 'descartar' ? id : null);
     if (d === 'descartar') {
-      void mover(id, 'nuevo', 'descartado').then((ok) => {
+      void mover(id, 'nuevo', 'descartado', undefined, 'revisar').then((ok) => {
         // Si el servidor no lo aceptó (ya avisó con un toast), la tarjeta vuelve.
         if (!ok) setMazo((m) => (ultimoPaso(m)?.id === id ? deshacerPaso(m) : m));
       });
@@ -138,19 +144,19 @@ export function RevisarModo({
     const c = porId.get(p.id);
     if (c && c.estado !== 'nuevo') {
       if (movida?.id === p.id) await deshacer();
-      else await cambiarEstado(p.id, 'nuevo');
+      else await cambiarEstado(p.id, 'nuevo', undefined, 'revisar');
     }
   };
 
   const elegirMotivo = (motivo: string) => {
     const id = descarte;
     mostrarMotivos(null);
-    if (id && porId.get(id)?.estado === 'descartado') void cambiarEstado(id, 'descartado', motivo);
+    if (id && porId.get(id)?.estado === 'descartado') void cambiarEstado(id, 'descartado', motivo, 'revisar');
   };
 
   // Pasa a "contactado" con el primer envío (Copiar o WhatsApp), no por deslizar.
   const marcarContactado = (id: string) => {
-    if (porId.get(id)?.estado === 'nuevo') void mover(id, 'nuevo', 'contactado');
+    if (porId.get(id)?.estado === 'nuevo') void mover(id, 'nuevo', 'contactado', undefined, 'revisar');
   };
 
   const cerrarHoja = useCallback(() => setHoja(null), []);

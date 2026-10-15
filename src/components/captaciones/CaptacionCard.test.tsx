@@ -45,6 +45,7 @@ const base: CaptacionDTO = {
   ultimaVezVista: '2026-10-05T12:00:00.000Z',
   contactId: null,
   propertyId: null,
+  eventos: [],
 };
 
 function render(c: Partial<CaptacionDTO>) {

@@ -242,9 +242,9 @@ model Captacion {
   analizadoPor          String? // "agente" | "heuristica"
 
   // Seguimiento
-  estado                   CaptacionEstado @default(nuevo)
+  estado                   CaptacionEstado   @default(nuevo)
   notas                    String?
-  estadoActualizadoEn      DateTime        @default(now())
+  estadoActualizadoEn      DateTime          @default(now())
   telefonoAdquiridoEn      DateTime? // phone bought via Apify; never buy again
   telefonoIntentadoEn      DateTime? // bought, but Zonaprop had no phone for the listing
   telefonoCompraIniciadaEn DateTime? // in-flight purchase lock (stale after a few minutes)
@@ -255,15 +255,16 @@ model Captacion {
   enviadoEn                DateTime?
   respondioEn              DateTime?
   captadoEn                DateTime?
-  primeraVezVista          DateTime        @default(now())
-  ultimaVezVista           DateTime        @default(now())
+  primeraVezVista          DateTime          @default(now())
+  ultimaVezVista           DateTime          @default(now())
   corridaId                String
   contactId                String?
-  contact                  Contact?        @relation(fields: [contactId], references: [id])
+  contact                  Contact?          @relation(fields: [contactId], references: [id])
   propertyId               String?
-  property                 Property?       @relation(fields: [propertyId], references: [id])
-  createdAt                DateTime        @default(now())
-  updatedAt                DateTime        @updatedAt
+  property                 Property?         @relation(fields: [propertyId], references: [id])
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+  eventos                  CaptacionEvento[]
 
   @@index([estado, score])
   @@index([estadoActualizadoEn])
@@ -271,4 +272,26 @@ model Captacion {
   @@index([contactId])
   @@index([propertyId])
   @@index([anguloEnviado])
+}
+
+// Quién cambió qué y cuándo. Append-only: nunca se edita ni se borra una fila.
+// El usuario sale siempre de la sesión del servidor (null solo para la
+// importación automática). Las captaciones cambiadas antes de que existiera
+// esta tabla no tienen eventos: la UI lo muestra como "antes del registro".
+model CaptacionEvento {
+  id             String           @id @default(cuid())
+  captacionId    String
+  captacion      Captacion        @relation(fields: [captacionId], references: [id])
+  tipo           String // "estado" | "notas" | "alta"
+  estadoAnterior CaptacionEstado?
+  estadoNuevo    CaptacionEstado?
+  notasCambiaron Boolean          @default(false) // se registra que cambiaron, nunca el texto
+  usuarioId      String?
+  usuarioEmail   String?
+  usuarioNombre  String?
+  origen         String // "app" | "revisar" | "importacion"
+  creadoEn       DateTime         @default(now())
+
+  @@index([captacionId, creadoEn])
+  @@index([usuarioId])
 }

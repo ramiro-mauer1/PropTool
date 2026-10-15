@@ -95,6 +95,31 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Error inesperado al guardar las captaciones.' }, { status: 500 });
   }
 
+  // "Alta" in each new captación's history. Outside the transaction on
+  // purpose: if this fails the import is already saved and only that history
+  // line is missing, so it is logged instead of failing the whole run.
+  if (nuevas.length) {
+    try {
+      const creadas = await prisma.captacion.findMany({
+        where: { clave: { in: nuevas.map((c) => c.clave) }, primeraVezVista: now },
+        select: { id: true },
+      });
+      if (creadas.length) {
+        await prisma.captacionEvento.createMany({
+          data: creadas.map((c) => ({
+            captacionId: c.id,
+            tipo: 'alta',
+            estadoNuevo: 'nuevo' as const,
+            origen: 'importacion',
+            creadoEn: now,
+          })),
+        });
+      }
+    } catch (err) {
+      console.error('[captaciones/import] No se pudo registrar el alta en el historial:', err);
+    }
+  }
+
   return NextResponse.json({
     recibidas: body.data.captaciones.length,
     nuevas: nuevas.length,

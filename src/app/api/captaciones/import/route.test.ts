@@ -6,6 +6,7 @@ type Row = Record<string, unknown> & { id: string; clave: string };
 
 let rows: Row[];
 let idCounter: number;
+let eventos: Record<string, unknown>[];
 
 function buildFakePrisma() {
   const api = {
@@ -27,6 +28,12 @@ function buildFakePrisma() {
         const r = rows.find((x) => x.clave === where.clave)!;
         Object.assign(r, data);
         return r;
+      }),
+    },
+    captacionEvento: {
+      createMany: vi.fn(async ({ data }: { data: Record<string, unknown>[] }) => {
+        eventos.push(...data);
+        return { count: data.length };
       }),
     },
     $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
@@ -58,6 +65,7 @@ function makeRequest(body: unknown, token: string | null = TOKEN) {
 beforeEach(() => {
   rows = [];
   idCounter = 0;
+  eventos = [];
   process.env.CAPTACION_INGEST_TOKEN = TOKEN;
 });
 
@@ -91,6 +99,17 @@ describe('POST /api/captaciones/import', () => {
     const data = await res.json();
     expect(data).toEqual({ recibidas: 3, nuevas: 0, actualizadas: 3, rechazadas: [] });
     expect(rows).toHaveLength(3);
+  });
+
+  it('registra el alta de las nuevas como importación, sin usuario, y una sola vez', async () => {
+    await POST(makeRequest(muestra));
+    await POST(makeRequest(muestra));
+    expect(eventos).toHaveLength(3);
+    for (const e of eventos) {
+      expect(e).toMatchObject({ tipo: 'alta', estadoNuevo: 'nuevo', origen: 'importacion' });
+      expect(e.usuarioId).toBeUndefined();
+    }
+    expect(new Set(eventos.map((e) => e.captacionId))).toEqual(new Set(rows.map((r) => r.id)));
   });
 
   it('no pisa lo que cargó el corredor, pero sí actualiza los datos del aviso', async () => {
