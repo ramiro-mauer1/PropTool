@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import JSZip from "jszip";
-import { downloadResult, toExportBlob } from "@/lib/settings";
+import { describeOutcome, saveResults, type SaveTarget } from "@/lib/saveFiles";
 import type {
   EnhanceQueueItem,
   EnhanceStatus,
@@ -446,72 +445,52 @@ export function useEnhanceQueue(options?: UseEnhanceQueueOptions) {
   }, [cancelActiveTask, terminateWorker]);
 
   /**
-   * Descarga una imagen individual en el formato de exportación elegido en Configuración.
+   * Guarda resultados sin sacar a la persona de la app: en celular abre la hoja de
+   * compartir (Guardar imagen / Fotos), en escritorio descarga el archivo o un ZIP.
+   * La cola no se toca: las fotos mejoradas siguen disponibles después de guardar.
    */
-  const downloadSingle = useCallback(
-    (id: string) => {
-      const item = queue.find((i) => i.id === id);
-      if (!item || !item.upscaledUrl) return;
-
-      const baseName = item.name.replace(/\.[^/.]+$/, "");
-      const suffix = item.isOptimized2K ? "_2k_super_res" : "_x4_super_res";
-      void downloadResult(item.upscaledBlob ?? item.upscaledUrl, `${baseName}${suffix}`);
+  const saveItems = useCallback(
+    async (items: EnhanceQueueItem[]) => {
+      const targets: SaveTarget[] = items
+        .filter((item) => item.upscaledBlob || item.upscaledUrl)
+        .map((item) => ({
+          source: (item.upscaledBlob ?? item.upscaledUrl)!,
+          baseName: `${item.name.replace(/\.[^/.]+$/, "")}${
+            item.isOptimized2K ? "_2k_super_res" : "_x4_super_res"
+          }`,
+        }));
+      if (targets.length === 0) return;
+      try {
+        const outcome = await saveResults(targets, { zipPrefix: "plinth_fotos_mejoradas" });
+        const message = describeOutcome(outcome, targets.length);
+        if (message) options?.onSuccess?.(message);
+      } catch (err) {
+        console.error("[useEnhanceQueue] Error al guardar fotos:", err);
+        options?.onError?.("No se pudieron guardar las fotos. Probá de nuevo.");
+      }
     },
-    [queue]
+    [options]
   );
 
-  /**
-   * Empaqueta todas las imágenes completadas (en el formato de exportación elegido) en un ZIP
-   * mediante JSZip y desencadena la descarga directa en el navegador.
-   */
-  const downloadAllZip = useCallback(async () => {
-    const completedItems = queue.filter(
-      (item) => item.status === "completed" && item.upscaledBlob
-    );
+  /** Guarda una sola foto mejorada. */
+  const downloadSingle = useCallback(
+    (id: string) => {
+      const item = queueRef.current.find((i) => i.id === id);
+      if (!item || item.status !== "completed") return;
+      void saveItems([item]);
+    },
+    [saveItems]
+  );
 
+  /** Guarda de una vez todas las fotos mejoradas (hasta MAX_QUEUE_SIZE). */
+  const downloadAll = useCallback(() => {
+    const completedItems = queueRef.current.filter((item) => item.status === "completed");
     if (completedItems.length === 0) {
-      if (options?.onError) {
-        options.onError("No hay imágenes procesadas listas para empaquetar.");
-      }
+      options?.onError?.("Todavía no hay fotos mejoradas para guardar.");
       return;
     }
-
-    try {
-      const zip = new JSZip();
-
-      for (let i = 0; i < completedItems.length; i++) {
-        const item = completedItems[i];
-        const baseName = item.name.replace(/\.[^/.]+$/, "");
-        const suffix = item.isOptimized2K ? "_2k_super_res" : "_x4_super_res";
-        const { blob, ext } = await toExportBlob(item.upscaledBlob!);
-        zip.file(`${baseName}${suffix}.${ext}`, blob);
-      }
-
-      const zipBlob = await zip.generateAsync({
-        type: "blob",
-        compression: "DEFLATE",
-        compressionOptions: { level: 6 },
-      });
-
-      const url = URL.createObjectURL(zipBlob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `plinth_super_resolucion_4x_${new Date().toISOString().slice(0, 10)}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      if (options?.onSuccess) {
-        options.onSuccess(`Archivo ZIP con ${completedItems.length} imágenes descargado.`);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Error al generar ZIP";
-      if (options?.onError) {
-        options.onError(`Error al empaquetar ZIP: ${msg}`);
-      }
-    }
-  }, [queue, options]);
+    void saveItems(completedItems);
+  }, [saveItems, options]);
 
   const completedCount = queue.filter((i) => i.status === "completed").length;
   const queuedCount = queue.filter((i) => i.status === "queued" || i.status === "processing").length;
@@ -529,7 +508,7 @@ export function useEnhanceQueue(options?: UseEnhanceQueueOptions) {
     cancelActiveTask,
     clearQueue,
     downloadSingle,
-    downloadAllZip,
+    downloadAll,
     warmupModel,
   };
 }

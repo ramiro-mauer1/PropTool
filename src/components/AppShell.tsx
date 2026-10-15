@@ -26,7 +26,9 @@ import {
   CLEANUP_UNAVAILABLE_MESSAGE,
   CLEANUP_UNAVAILABLE_TITLE,
 } from "@/lib/aiModels";
-import { downloadResult, useDeviceSettings } from "@/lib/settings";
+import { useDeviceSettings } from "@/lib/settings";
+import { describeOutcome, saveResults, type SaveTarget } from "@/lib/saveFiles";
+import { PendingSaveBar } from "@/components/PendingSaveBar";
 
 /**
  * Estado que comparten las secciones. Vive en el layout, no en cada página:
@@ -253,16 +255,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setImages([]);
   }, [images, isProcessing, cancelBatch, clearData]);
 
-  const handleDownloadAllClean = useCallback(() => {
+  // Todas juntas: en celular una sola hoja de compartir, en escritorio un ZIP.
+  // Llamar a la descarga una vez por foto abría varias hojas (y el celular
+  // rechaza todas menos la primera).
+  const handleDownloadAllClean = useCallback(async () => {
+    const targets: SaveTarget[] = [];
     processedIds.forEach((id) => {
       const url = cleanUrls[id];
       const img = images.find((i) => i.id === id);
       if (url && img) {
-        const fileName = img.file.name.replace(/\.[^/.]+$/, "");
-        void downloadResult(url, `${fileName}_limpia`);
+        targets.push({
+          source: cleanBlobs[id] ?? url,
+          baseName: `${img.file.name.replace(/\.[^/.]+$/, "")}_limpia`,
+        });
       }
     });
-  }, [processedIds, cleanUrls, images]);
+    if (targets.length === 0) return;
+    try {
+      const outcome = await saveResults(targets, { zipPrefix: "plinth_fotos_limpias" });
+      const message = describeOutcome(outcome, targets.length);
+      if (message) showToast({ title: "Fotos limpias", message, type: "success" });
+    } catch (err) {
+      console.error("[AppShell] Error al guardar fotos limpias:", err);
+      showToast({ message: "No se pudieron guardar las fotos. Probá de nuevo.", type: "error" });
+    }
+  }, [processedIds, cleanUrls, cleanBlobs, images, showToast]);
 
   const handleProcessBatch = useCallback(async () => {
     if (!(await isLamaModelAvailable())) {
@@ -509,6 +526,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative pb-[var(--bottom-nav-space)] bg-[#FAFAFA] dark:bg-[#09090B] transition-colors duration-150">
             <WorkspaceContext.Provider value={workspace}>{children}</WorkspaceContext.Provider>
           </main>
+
+          <PendingSaveBar />
 
           <BottomNavBar
             items={bottomNavItems}

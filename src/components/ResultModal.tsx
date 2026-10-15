@@ -11,7 +11,7 @@ import {
   ArrowLeftRight,
 } from "lucide-react";
 import { BatchImage } from "@/types/batch";
-import { downloadResult } from "@/lib/settings";
+import { saveResults } from "@/lib/saveFiles";
 
 interface ResultModalProps {
   image: BatchImage | null;
@@ -56,7 +56,9 @@ export function ResultModal({
     if (!cleanUrl || !image) return;
 
     const fileName = image.file.name.replace(/\.[^/.]+$/, "");
-    void downloadResult(cleanUrl, `${fileName}_limpia`);
+    void saveResults([{ source: cleanUrl, baseName: `${fileName}_limpia` }]).catch((err) =>
+      console.error("[ResultModal] Error al guardar la foto:", err)
+    );
   }, [cleanUrl, image]);
 
   if (!isOpen || !image) return null;

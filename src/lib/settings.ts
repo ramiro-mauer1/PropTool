@@ -151,17 +151,3 @@ export async function toExportBlob(source: Blob): Promise<{ blob: Blob; ext: str
   const actual = (Object.keys(MIME) as ExportFormat[]).find((f) => MIME[f] === blob.type) ?? 'png';
   return { blob, ext: EXT[actual] };
 }
-
-/** Descarga un resultado aplicando el formato de exportación. `baseName` sin extensión. */
-export async function downloadResult(source: Blob | string, baseName: string) {
-  const blob = typeof source === 'string' ? await (await fetch(source)).blob() : source;
-  const { blob: out, ext } = await toExportBlob(blob);
-  const url = URL.createObjectURL(out);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${baseName}.${ext}`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
