@@ -99,9 +99,25 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getClaims verifies the access token's signature locally against the
+  // project's public key (ES256, JWKS cached in memory) instead of a round trip
+  // to Supabase Auth on every page, prefetch, image and API call — that trip
+  // was most of the wait on each section change. It still refreshes an expired
+  // session. What it can't see is a session revoked before the token expires
+  // (≤ 1 h); that's fine here because pages carry no data and every Route
+  // Handler re-checks with getUser (requireUser), which does ask Supabase.
+  let user: { app_metadata?: Record<string, unknown> } | null = null;
+  try {
+    const { data } = await supabase.auth.getClaims();
+    user = data?.claims ?? null;
+  } catch {
+    // Unexpected failure verifying locally: fall back to asking the server.
+    user = (await supabase.auth.getUser()).data.user;
+  }
+  // The token is a snapshot of app_metadata from when it was issued: before
+  // turning a session away for lacking the access flag, ask the server, in
+  // case it was granted since.
+  if (user && !hasAppAccess(user)) user = (await supabase.auth.getUser()).data.user;
 
   // A session without the access flag (e.g. a sign-up made straight against
   // Supabase, bypassing the allowlist) counts as no session at all.
