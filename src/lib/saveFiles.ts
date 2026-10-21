@@ -1,7 +1,6 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-import JSZip from 'jszip';
 import { toExportBlob } from '@/lib/settings';
 
 /**
@@ -122,6 +121,9 @@ async function downloadFiles(files: File[], zipName: string) {
     triggerDownload(files[0], files[0].name);
     return;
   }
+  // JSZip se pide recién acá (solo escritorio, varias fotos): no pesa en la
+  // carga inicial de la app.
+  const { default: JSZip } = await import('jszip');
   const zip = new JSZip();
   for (const file of files) zip.file(file.name, await file.arrayBuffer());
   // Las imágenes ya vienen comprimidas: STORE es igual de chico y mucho más rápido.

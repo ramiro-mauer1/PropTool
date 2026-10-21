@@ -1,4 +1,7 @@
-import { Tensor } from "onnxruntime-web";
+// Sin onnxruntime-web acá: useEnhanceQueue usa calculateAdaptiveDimensions en
+// el hilo principal, y cualquier import de ONNX en este archivo metía la
+// librería entera (~350 KB) en la carga inicial de toda la app. Lo que crea
+// tensores vive en el worker (upscale.worker.ts).
 import type { TileCoordinates } from "@/types/enhance";
 
 // 384 en vez de 256: más contexto por tile para el modelo (menos halos en
@@ -225,15 +228,6 @@ export function imageToNCHWFloat32(imageData: ImageData): Float32Array {
   }
 
   return floatData;
-}
-
-/**
- * Crea un Tensor ONNX de tipo float32 con forma [1, 3, height, width]
- * a partir de un ImageData de entrada.
- */
-export function createTileTensor(imageData: ImageData): Tensor {
-  const floatData = imageToNCHWFloat32(imageData);
-  return new Tensor("float32", floatData, [1, 3, imageData.height, imageData.width]);
 }
 
 // El modelo (entrenado para eliminar ruido/artefactos JPEG) aplasta a negro

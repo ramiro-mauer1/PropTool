@@ -19,7 +19,6 @@ import { REPLAY_WELCOME_EVENT } from "@/components/auth/WelcomeFlow";
 import type { StartModule } from "@/lib/userPreferences";
 import { APP_SECTIONS, isSectionActive, startHref } from "@/components/appSections";
 import { BatchImage, WatermarkBBox } from "@/types/batch";
-import { detectWatermarkBox, createMaskFromBBox } from "@/utils/textDetector";
 import { useCleanupAvailable } from "@/hooks/useCleanupAvailable";
 import {
   isLamaModelAvailable,
@@ -29,6 +28,10 @@ import {
 import { useDeviceSettings } from "@/lib/settings";
 import { describeOutcome, saveResults, type SaveTarget } from "@/lib/saveFiles";
 import { PendingSaveBar } from "@/components/PendingSaveBar";
+
+// El detector de marcas de agua arrastra onnxruntime-web (~350 KB): se pide
+// recién cuando entran fotos a Limpieza, no en el arranque de la app.
+const loadTextDetector = () => import("@/utils/textDetector");
 
 /**
  * Estado que comparten las secciones. Vive en el layout, no en cada página:
@@ -222,6 +225,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     Promise.all(
       newImages.map(async (img) => {
         try {
+          const { detectWatermarkBox, createMaskFromBBox } = await loadTextDetector();
           const bitmap = await createImageBitmap(img.file);
           const canvas = document.createElement("canvas");
           canvas.width = bitmap.width;
@@ -302,6 +306,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         currentImages.map(async (img) => {
           if (!img.maskData && !processedIds.includes(img.id)) {
             try {
+              const { detectWatermarkBox, createMaskFromBBox } = await loadTextDetector();
               const bitmap = await createImageBitmap(img.file);
               const canvas = document.createElement("canvas");
               canvas.width = bitmap.width;

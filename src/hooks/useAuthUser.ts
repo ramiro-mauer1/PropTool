@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { isAuthRetryableFetchError } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
 import { hasAppAccess, isAppOwner } from '@/lib/auth/access';
 import { isStartModule, messageToneFromMetadata, type MessageTone, type StartModule } from '@/lib/userPreferences';
@@ -66,26 +67,55 @@ export function useAuthUser() {
   useEffect(() => {
     if (SCREENSHOT_BYPASS) return;
     const supabase = createClient();
+    let confirmado = false;
+    let mostrado = false;
 
-    supabase.auth.getUser().then(({ data }) => {
+    // Primero la sesión guardada en el navegador: no viaja a Supabase (salvo
+    // que el token haya vencido), así al abrir la app se ve la sección en vez
+    // de esperar la red. Solo decide qué se dibuja: los datos los protege el
+    // servidor en cada pedido. Si con esa sesión no se entra directo (sin
+    // acceso, bienvenida pendiente) se espera a Supabase, como antes.
+    supabase.auth.getSession().then(({ data }) => {
+      const guardado = toAuthUser(data.session?.user ?? null);
+      if (confirmado || !guardado || guardado.needsOnboarding) return;
+      mostrado = true;
+      setUser(guardado);
+      setIsLoading(false);
+    });
+
+    // Después, el usuario confirmado por Supabase y con la metadata al día:
+    // corrige lo anterior (sesión cerrada desde otro equipo, preferencias nuevas).
+    supabase.auth.getUser().then(({ data, error }) => {
+      confirmado = true;
+      // Sin conexión no hay con qué corregir: sigue la sesión guardada.
+      if (mostrado && isAuthRetryableFetchError(error)) return;
       setUser(toAuthUser(data.user));
       setIsLoading(false);
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // La carga inicial ya la cubren las dos consultas de arriba.
+      if (event === 'INITIAL_SESSION') return;
       if (!session) {
         setUser(null);
         return;
       }
+      // Al arrancar, Supabase avisa SIGNED_IN (o TOKEN_REFRESHED): hasta que
+      // vuelva la consulta inicial, ella ya trae el usuario fresco.
+      if (!confirmado) return;
       // El usuario de la sesión sale del JWT guardado en el navegador, y su
       // user_metadata puede estar viejo (p. ej. tras un cambio hecho desde el
       // servidor). Se pide el usuario fresco para no pisar preferencias ni la
       // marca de bienvenida pendiente. Diferido: Supabase no permite llamar a
       // la API de auth dentro del callback sin trabar el lock de sesión.
       setTimeout(() => {
-        supabase.auth.getUser().then(({ data }) => setUser(toAuthUser(data.user)));
+        supabase.auth.getUser().then(({ data, error }) => {
+          // Un corte de red no es un cierre de sesión.
+          if (isAuthRetryableFetchError(error)) return;
+          setUser(toAuthUser(data.user));
+        });
       }, 0);
     });
 

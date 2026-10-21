@@ -75,10 +75,13 @@ export function EnhanceWorkspace({
     warmupModel,
   } = controls;
 
-  // Precargar modelo
+  // Precargar el modelo cuando hay fotos en la cola, no apenas se entra a la
+  // sección: son ~33 MB (motor WASM + modelo) y, bajados con solo tocar la
+  // pestaña, saturaban la conexión del celular y frenaban el resto de la app.
+  const hayFotos = queue.length > 0;
   useEffect(() => {
-    warmupModel();
-  }, [warmupModel]);
+    if (hayFotos) warmupModel();
+  }, [hayFotos, warmupModel]);
 
   useEffect(() => {
     if (selectedIndex >= queue.length && queue.length > 0) {

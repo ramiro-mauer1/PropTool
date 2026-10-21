@@ -2,7 +2,7 @@ import * as ort from "onnxruntime-web";
 import {
   computeUpscaleTiles,
   generateTileWeightMask,
-  createTileTensor,
+  imageToNCHWFloat32,
   UpscaleAccumulator,
   calculateAdaptiveDimensions,
   TILE_SIZE,
@@ -26,6 +26,11 @@ const MODEL_LOAD_FAILED_MESSAGE =
   "No pudimos preparar la mejora de fotos. Revisá tu conexión y probá de nuevo en unos minutos.";
 const PROCESSING_FAILED_MESSAGE =
   "No pudimos mejorar esta foto. Probá de nuevo o con otra imagen.";
+
+/** Tensor ONNX float32 con forma [1, 3, height, width] a partir de un ImageData. */
+function createTileTensor(imageData: ImageData): ort.Tensor {
+  return new ort.Tensor("float32", imageToNCHWFloat32(imageData), [1, 3, imageData.height, imageData.width]);
+}
 
 /** Error con un mensaje apto para mostrarle al usuario tal cual. */
 class UserFacingError extends Error {}

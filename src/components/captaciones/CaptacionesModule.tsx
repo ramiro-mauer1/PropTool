@@ -36,6 +36,14 @@ interface Movida {
 
 const UNDO_MS = 8000;
 
+// La lista se monta de a lotes: al entrar, y al cambiar de etapa o de filtro,
+// solo las primeras LOTE; el lote siguiente entra cuando el final de lo
+// montado queda a PRECARGA_PX del borde de abajo del panel (unas 4 tarjetas
+// en el celular), así ya está pintado cuando se llega. 12 llena filas enteras
+// con 1, 2 y 3 columnas.
+const LOTE = 12;
+const PRECARGA_PX = 2400;
+
 // Masonry: each card keeps a fixed column (index % columns) and spans as many
 // 1px rows as it is tall, so opening an accordion only pushes down the cards
 // below it in the same column. `grid-flow-row-dense` packs each card right
@@ -107,6 +115,8 @@ export function CaptacionesModule({ agentName = null }: CaptacionesModuleProps) 
   const [revisando, setRevisando] = useState<CaptacionDTO[] | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const revisarBtn = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const finLista = useRef<HTMLDivElement>(null);
 
   useEffect(() => () => clearTimeout(undoTimer.current), []);
 
@@ -138,6 +148,37 @@ export function CaptacionesModule({ agentName = null }: CaptacionesModuleProps) 
 
   // Already ordered by score desc from the API; filtering preserves the order.
   const visibles = useMemo(() => filtradas.filter((c) => pestaniaDe(c.estado) === pestania), [filtradas, pestania]);
+
+  // Cuántas de las visibles están montadas. Conteos, "Revisar" y el modo
+  // Revisar siguen usando `visibles` entera.
+  const lista = `${pestania}|${operacion}|${partido}|${soloBarrioCerrado}|${cambiadoPor}`;
+  const [tope, setTope] = useState(LOTE);
+  const [listaDelTope, setListaDelTope] = useState(lista);
+  // Otra etapa u otro filtro: vuelve al primer lote. Se ajusta en el render
+  // (no en un efecto) para no montar la lista nueva con el tope de la anterior.
+  if (listaDelTope !== lista) {
+    setListaDelTope(lista);
+    setTope(LOTE);
+  }
+  const montadas = visibles.slice(0, tope);
+  const hayMas = tope < visibles.length;
+
+  // Suma un lote cuando el final de lo montado entra en el margen. La raíz es
+  // el panel que scrollea, no la ventana: con la ventana el margen no ve más
+  // allá del recorte del panel. Se rearma con cada lote y cada vez que el final
+  // aparece, así, si sigue cerca (pantalla alta), el primer aviso pide otro.
+  useEffect(() => {
+    const fin = finLista.current;
+    if (!fin) return;
+    const io = new IntersectionObserver(
+      (entradas) => {
+        if (entradas.some((e) => e.isIntersecting)) setTope(tope + LOTE);
+      },
+      { root: panel.current, rootMargin: `0px 0px ${PRECARGA_PX}px 0px` }
+    );
+    io.observe(fin);
+    return () => io.disconnect();
+  }, [tope, hayMas, loadError]);
 
   const mover = useCallback(
     async (
@@ -177,7 +218,7 @@ export function CaptacionesModule({ agentName = null }: CaptacionesModuleProps) 
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="captaciones-scope flex-1 overflow-y-auto overscroll-contain bg-background text-foreground">
+      <div ref={panel} className="captaciones-scope flex-1 overflow-y-auto overscroll-contain bg-background text-foreground">
         <div className="max-w-6xl mx-auto p-3 sm:p-6 pb-24 space-y-4">
           {/* Encabezado */}
           <div className="flex items-start justify-between gap-3">
@@ -355,7 +396,7 @@ export function CaptacionesModule({ agentName = null }: CaptacionesModuleProps) 
               role="tabpanel"
             >
               <AnimatePresence mode="popLayout" initial={false}>
-                {visibles.map((c, i) => (
+                {montadas.map((c, i) => (
                   <MasonryCell key={c.id} index={i}>
                     <CaptacionCard
                       captacion={c}
@@ -367,6 +408,8 @@ export function CaptacionesModule({ agentName = null }: CaptacionesModuleProps) 
                   </MasonryCell>
                 ))}
               </AnimatePresence>
+              {/* Final de lo montado. Absoluto: no ocupa celda ni corre el masonry. */}
+              {hayMas && <div ref={finLista} aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-px" />}
             </div>
           )}
         </div>
